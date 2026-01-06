@@ -1,227 +1,203 @@
-# Globex
+<p align="center">
+  <img src="globex.jpg" alt="Globex Corporation - Hank Scorpio and Ralph Wiggum" width="600">
+</p>
 
-Agentic PRD generation with human-in-the-loop validation. An [OpenCode](https://opencode.ai) plugin.
+<h1 align="center">Globex</h1>
 
-Named after Hank Scorpio's company. The "Ralph loop" is named after Ralph Wiggum.
+<p align="center">
+  <strong>Agentic PRD generation with human-in-the-loop validation</strong>
+</p>
+
+<p align="center">
+  An <a href="https://opencode.ai">OpenCode</a> plugin
+</p>
+
+<p align="center">
+  <a href="#philosophy">Philosophy</a> •
+  <a href="#installation">Installation</a> •
+  <a href="#usage">Usage</a> •
+  <a href="#ralph-loop">Ralph Loop</a> •
+  <a href="#development">Development</a>
+</p>
+
+---
 
 ## Philosophy
 
-Human leverage is highest at spec level, lowest at implementation. Front-load human validation into research and planning; execution runs autonomously.
+> "Human leverage is highest at spec level, lowest at implementation."
 
-Based on:
-- [Anthropic's Effective Harnesses for Long-Running Agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents)
-- [Geoffrey Huntley's Ralph Driven Development](https://ghuntley.com/ralph/)
-- [Anthropic's Ralph Wiggum Plugin](https://github.com/anthropics/claude-code/tree/main/plugins/ralph-wiggum)
+Front-load human validation into research and planning. Execution runs autonomously.
+
+Named after Hank Scorpio's company. The "Ralph loop" is named after Ralph Wiggum—persistent iteration despite setbacks.
+
+**Based on:**
+- [Anthropic: Effective Harnesses for Long-Running Agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents)
+- [Geoffrey Huntley: Ralph Driven Development](https://ghuntley.com/ralph/)
+- [Anthropic: Ralph Wiggum Plugin](https://github.com/anthropics/claude-code/tree/main/plugins/ralph-wiggum)
+
+---
 
 ## Flow
 
 ```
-/globex-init → /globex-research → /globex-interview → /globex-plan → /globex-interview → /globex-features → /globex-interview → /globex-run
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│  Research   │────▶│    Plan     │────▶│  Features   │────▶│   Execute   │
+└─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
+       │                   │                   │                   │
+       ▼                   ▼                   ▼                   ▼
+   Interview           Interview           Interview          Ralph Loop
+   (approve)           (approve)           (approve)         (autonomous)
 ```
 
 Each phase requires human approval via `/globex-interview` before proceeding.
 
+---
+
 ## Installation
 
 ```bash
-# Clone the repo
 git clone https://github.com/yourorg/globex.git
 cd globex
-
-# Install dependencies
 bun install
-
-# Build
 bun run build
-
-# Link to OpenCode (adjust path as needed)
-# Add to your opencode config or symlink to plugins directory
 ```
+
+Add to your OpenCode configuration or symlink to plugins directory.
+
+---
 
 ## Usage
 
-### 1. Initialize Project
+### Initialize
 
 ```bash
 opencode
 > /globex-init
 ```
 
-Creates `.globex/` directory with state tracking.
-
-### 2. Research Phase
+### Research → Plan → Features
 
 ```bash
-> /globex-research
+> /globex-research      # Agent explores codebase
+> /globex-interview     # Human validates research
+
+> /globex-plan          # Agent creates implementation plan  
+> /globex-interview     # Human validates plan
+
+> /globex-features      # Agent breaks into atomic features
+> /globex-interview     # Human validates features
 ```
 
-Agent explores codebase, documents AS-IS state with citations.
-
-### 3. Validate Research
+### Execute
 
 ```bash
-> /globex-interview
-```
-
-Human reviews research, asks clarifying questions, approves or requests changes.
-
-### 4. Plan Phase
-
-```bash
-> /globex-plan
-```
-
-Agent creates implementation plan from research findings.
-
-### 5. Validate Plan
-
-```bash
-> /globex-interview
-```
-
-Human reviews plan, resolves open questions, approves.
-
-### 6. Generate Features
-
-```bash
-> /globex-features
-```
-
-Agent breaks plan into atomic, implementable features sized for ~50% context window.
-
-### 7. Validate Features
-
-```bash
-> /globex-interview
-```
-
-Human reviews feature breakdown, approves.
-
-### 8. Execute (Ralph Loop)
-
-```bash
-# Option A: Use the wrapper script
 ./scripts/ralph-loop.sh --max-iterations 50
-
-# Option B: Manual loop
-while true; do
-  opencode run "/globex-run"
-done
 ```
 
-Each iteration:
-1. Reads fresh state from files
-2. Picks ONE feature
-3. Implements and verifies
-4. Pauses for human manual verification
-5. Commits and exits
+---
+
+## Ralph Loop
+
+Stateless, autonomous execution. Each iteration:
+
+1. **Get up to speed** — Read progress.md, features.json, git log
+2. **Health check** — Build passes? Tests pass?
+3. **Pick ONE feature** — Smallest eligible feature
+4. **Implement** — Follow existing patterns
+5. **Verify** — Automated checks
+6. **Pause** — Human manual verification
+7. **Commit** — Clean state for next iteration
+8. **Exit** — Loop restarts with fresh context
 
 Loop continues until `<promise>ALL_FEATURES_COMPLETE</promise>`.
 
-## Feature Sizing
+### Feature Sizing
 
-Features are sized to fit ~50% of agent context window:
+Features sized for ~50% of agent context window:
 
 | Constraint | Limit |
-|------------|-------|
-| Estimated time | 30-60 min |
-| Files touched | 10-20 max |
-| Lines changed | ~500 max |
-| Dependencies | 0-2 other features |
+|:-----------|:------|
+| Time | 30-60 min |
+| Files | 10-20 max |
+| Lines | ~500 max |
+| Dependencies | 0-2 features |
 
-If larger, split into Setup → Core → Polish.
+### Erecting Signs
 
-## Erecting Signs
-
-When the agent learns operational knowledge, it persists to `.globex/progress.md`:
+Agent persists operational knowledge for future iterations:
 
 ```
-globex_update_progress(learning: "Run migrations before seeding test data")
+globex_update_progress(learning: "Run migrations before seeding")
 ```
 
-Future iterations read these learnings during "getting up to speed" phase.
+---
 
 ## Project Structure
 
 ```
 globex/
 ├── src/
-│   ├── index.ts              # Plugin entry point
+│   ├── index.ts                 # Plugin entry
 │   ├── state/
-│   │   ├── types.ts          # Phase, Approval, ExecutionState types
-│   │   └── persistence.ts    # State CRUD operations
-│   └── tools/
-│       ├── globex-init.ts
-│       ├── globex-status.ts
-│       ├── save-artifact.ts
-│       ├── approve-phase.ts
-│       ├── verify-citation.ts
-│       ├── check-convergence.ts
-│       ├── update-feature.ts
-│       ├── get-next-feature.ts
-│       └── update-progress.ts
-├── skills/
-│   ├── globex-init.md
-│   ├── globex-status.md
-│   ├── globex-research.md
-│   ├── globex-interview.md
-│   ├── globex-plan.md
-│   ├── globex-features.md
-│   └── globex-run.md
+│   │   ├── types.ts             # Phase, ExecutionState types
+│   │   └── persistence.ts       # State CRUD
+│   └── tools/                   # 9 custom tools
+├── skills/                      # 7 skill markdown files
 ├── scripts/
-│   └── ralph-loop.sh         # External loop wrapper
-├── tests/
-│   ├── state.test.ts
-│   └── tools.test.ts
-├── opencode.json             # Skill registrations
-├── package.json
-└── tsconfig.json
+│   └── ralph-loop.sh            # External loop wrapper
+├── tests/                       # 35 tests
+├── opencode.json                # Skill registrations
+└── package.json
 ```
+
+---
 
 ## Tools
 
 | Tool | Description |
-|------|-------------|
-| `globex_init` | Initialize new project |
-| `globex_status` | Get current phase and state |
-| `globex_save_artifact` | Save .md/.json artifacts |
-| `globex_approve_phase` | Record approval and transition |
+|:-----|:------------|
+| `globex_init` | Initialize project |
+| `globex_status` | Get current phase |
+| `globex_save_artifact` | Save .md/.json files |
+| `globex_approve_phase` | Record approval, transition |
 | `globex_verify_citation` | Validate file:line citations |
-| `globex_check_convergence` | Track interview questions/time |
+| `globex_check_convergence` | Track interview progress |
 | `globex_update_feature` | Mark feature complete |
 | `globex_get_next_feature` | Pick next eligible feature |
-| `globex_update_progress` | Update progress.md, add learnings |
+| `globex_update_progress` | Update progress, add learnings |
+
+---
 
 ## Development
 
 ```bash
-# Install deps
-bun install
-
-# Run all checks (lint + build + test)
-bun run check
-
-# Individual commands
-bun run lint      # oxlint
-bun run build     # tsc
-bun test          # bun test
+bun run check    # lint + build + test
+bun run lint     # oxlint
+bun run build    # tsc
+bun test         # 35 tests
 ```
+
+---
 
 ## State Files
 
-All state lives in `.globex/`:
-
 ```
 .globex/
-├── state.json      # Phase, approvals, execution state
-├── research.md     # Research findings
-├── research.json   # Structured research data
-├── plan.md         # Implementation plan
-├── plan.json       # Structured plan data
-├── features.json   # Feature list with pass/fail
-└── progress.md     # Current progress, learnings
+├── state.json       # Phase, approvals, execution state
+├── research.md      # Research findings
+├── plan.md          # Implementation plan
+├── features.json    # Feature list with pass/fail
+└── progress.md      # Current progress, learnings
 ```
+
+---
 
 ## License
 
 MIT
+
+---
+
+<p align="center">
+  <em>"Don't call me Mr. Scorpion. It's Mr. Scorpio, but don't call me that either."</em>
+</p>
