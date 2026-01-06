@@ -1,0 +1,33 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "skills": {
+    "globex-init": {
+      "path": "./skills/globex-init.md",
+      "description": "Initialize a new Globex PRD workflow"
+    },
+    "globex-status": {
+      "path": "./skills/globex-status.md",
+      "description": "Check current Globex project status"
+    },
+    "globex-research": {
+      "path": "./skills/globex-research.md",
+      "description": "Conduct deep codebase research"
+    },
+    "globex-interview": {
+      "path": "./skills/globex-interview.md",
+      "description": "Validate current phase with interview"
+    },
+    "globex-plan": {
+      "path": "./skills/globex-plan.md",
+      "description": "Create implementation plan from research"
+    },
+    "globex-features": {
+      "path": "./skills/globex-features.md",
+      "description": "Generate atomic feature list from plan"
+    },
+    "globex-run": {
+      "path": "./skills/globex-run.md",
+      "description": "Execute Ralph loop to implement features"
+    }
+  }
+}
