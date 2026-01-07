@@ -191,7 +191,7 @@ Each feature must be completable in a single stateless iteration.
 6. Save features.json via globex_save_artifact()
 
 ## Feature Schema
-Each feature: id, description, category, acceptanceCriteria, verification, passes: false, priority, dependencies, filesTouched, estimatedMinutes.
+Each feature: id, description, category, acceptanceCriteria, verification, passes: false, priority, dependencies, filesTouched, patternsToFollow, attempts.
 
 When complete, inform user to run /globex-interview to validate.`
 

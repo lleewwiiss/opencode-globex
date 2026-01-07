@@ -19,7 +19,6 @@ interface Feature {
   category?: string
   acceptanceCriteria?: string[]
   filesTouched?: string[]
-  estimatedMinutes?: number
   blocked?: boolean
   blockedReason?: string
   attempts?: number
@@ -91,7 +90,6 @@ Returns JSON with one of:
           priority: next.priority,
           acceptanceCriteria: next.acceptanceCriteria,
           filesTouched: next.filesTouched,
-          estimatedMinutes: next.estimatedMinutes,
           dependencies: next.dependencies,
           patternsToFollow: next.patternsToFollow ?? [],
           attempts: next.attempts ?? 0,

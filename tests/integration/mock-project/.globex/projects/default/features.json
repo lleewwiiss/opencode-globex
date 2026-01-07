@@ -10,9 +10,10 @@
         "Function returns 'Hello, {name}!' string"
       ],
       "filesTouched": ["src/index.ts"],
-      "estimatedMinutes": 5,
       "dependencies": [],
-      "passes": false
+      "passes": false,
+      "patternsToFollow": [],
+      "attempts": 0
     },
     {
       "id": "MOCK-002",
@@ -24,9 +25,10 @@
         "Function returns 'Goodbye, {name}!' string"
       ],
       "filesTouched": ["src/index.ts"],
-      "estimatedMinutes": 5,
       "dependencies": ["MOCK-001"],
-      "passes": false
+      "passes": false,
+      "patternsToFollow": [],
+      "attempts": 0
     },
     {
       "id": "MOCK-003",
@@ -38,9 +40,10 @@
         "VERSION matches package.json version"
       ],
       "filesTouched": ["src/index.ts"],
-      "estimatedMinutes": 5,
       "dependencies": [],
-      "passes": false
+      "passes": false,
+      "patternsToFollow": [],
+      "attempts": 0
     }
   ],
   "summary": {
@@ -48,7 +51,6 @@
     "byCategory": {
       "functional": 2,
       "infrastructure": 1
-    },
-    "estimatedTotalMinutes": 15
+    }
   }
 }
