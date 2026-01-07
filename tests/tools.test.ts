@@ -376,6 +376,107 @@ describe("tools", () => {
       expect(content).toContain("F001")
     })
   })
+
+  describe("add_learning", () => {
+    test("creates AGENTS.md if missing", async () => {
+      const { createAddLearning } = await import("../src/tools/add-learning")
+      const tool = createAddLearning(testDir)
+      
+      const result = await tool.execute(
+        { learning: "Run migrations before seeding" },
+        mockContext()
+      )
+      
+      const parsed = JSON.parse(result)
+      expect(parsed.success).toBe(true)
+      expect(parsed.action).toBe("added")
+      
+      const agentsPath = path.join(testDir, "AGENTS.md")
+      const content = await fs.readFile(agentsPath, "utf-8")
+      expect(content).toContain("# AGENTS.md")
+      expect(content).toContain("Run migrations before seeding")
+      expect(content).toContain("## Globex Learnings (auto-generated)")
+    })
+
+    test("appends learning to existing AGENTS.md", async () => {
+      const agentsPath = path.join(testDir, "AGENTS.md")
+      await fs.writeFile(agentsPath, "# Project Instructions\n\nExisting content here.\n")
+      
+      const { createAddLearning } = await import("../src/tools/add-learning")
+      const tool = createAddLearning(testDir)
+      
+      const result = await tool.execute(
+        { learning: "Build requires NODE_ENV=production" },
+        mockContext()
+      )
+      
+      const parsed = JSON.parse(result)
+      expect(parsed.success).toBe(true)
+      expect(parsed.action).toBe("added")
+      
+      const content = await fs.readFile(agentsPath, "utf-8")
+      expect(content).toContain("Existing content here")
+      expect(content).toContain("Build requires NODE_ENV=production")
+      expect(content).toContain("## Globex Learnings (auto-generated)")
+    })
+
+    test("prevents duplicate learnings", async () => {
+      const { createAddLearning } = await import("../src/tools/add-learning")
+      const tool = createAddLearning(testDir)
+      
+      await tool.execute(
+        { learning: "Use bun instead of npm" },
+        mockContext()
+      )
+      
+      const result = await tool.execute(
+        { learning: "Use bun instead of npm" },
+        mockContext()
+      )
+      
+      const parsed = JSON.parse(result)
+      expect(parsed.success).toBe(true)
+      expect(parsed.action).toBe("skipped")
+      expect(parsed.reason).toContain("already exists")
+      
+      const agentsPath = path.join(testDir, "AGENTS.md")
+      const content = await fs.readFile(agentsPath, "utf-8")
+      const matches = content.match(/Use bun instead of npm/g)
+      expect(matches?.length).toBe(1)
+    })
+
+    test("appends to existing learnings section", async () => {
+      const agentsPath = path.join(testDir, "AGENTS.md")
+      const existingContent = `# AGENTS.md
+
+Project instructions.
+
+## Globex Learnings (auto-generated)
+
+- First learning
+<!-- end globex learnings -->
+`
+      await fs.writeFile(agentsPath, existingContent)
+      
+      const { createAddLearning } = await import("../src/tools/add-learning")
+      const tool = createAddLearning(testDir)
+      
+      const result = await tool.execute(
+        { learning: "Second learning" },
+        mockContext()
+      )
+      
+      const parsed = JSON.parse(result)
+      expect(parsed.success).toBe(true)
+      
+      const content = await fs.readFile(agentsPath, "utf-8")
+      expect(content).toContain("- First learning")
+      expect(content).toContain("- Second learning")
+      const firstIndex = content.indexOf("First learning")
+      const secondIndex = content.indexOf("Second learning")
+      expect(secondIndex).toBeGreaterThan(firstIndex)
+    })
+  })
 })
 
 function mockContext() {
