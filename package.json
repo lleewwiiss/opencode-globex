@@ -4,6 +4,7 @@
   "description": "Agentic PRD generation with human-in-the-loop validation",
   "type": "module",
   "main": "dist/index.js",
+  "opencode-plugin": true,
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",

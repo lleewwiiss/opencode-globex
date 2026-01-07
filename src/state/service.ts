@@ -4,11 +4,28 @@ import { Schema } from "effect"
 import type { GlobexState, Phase, Approval } from "./types.js"
 
 const GLOBEX_DIR = ".globex"
+const PROJECTS_DIR = "projects"
 const STATE_FILE = "state.json"
+const ACTIVE_PROJECT_FILE = "active-project"
+export const DEFAULT_PROJECT = "default"
 
-export const getGlobexDir = (workdir: string): string => `${workdir}/${GLOBEX_DIR}`
+export const getGlobexBaseDir = (workdir: string): string =>
+  `${workdir}/${GLOBEX_DIR}`
 
-export const getStatePath = (workdir: string): string => `${getGlobexDir(workdir)}/${STATE_FILE}`
+export const getProjectDir = (workdir: string, projectId: string): string =>
+  `${getGlobexBaseDir(workdir)}/${PROJECTS_DIR}/${projectId}`
+
+export const getActiveProjectPath = (workdir: string): string =>
+  `${getGlobexBaseDir(workdir)}/${ACTIVE_PROJECT_FILE}`
+
+export const getLegacyStatePath = (workdir: string): string =>
+  `${getGlobexBaseDir(workdir)}/${STATE_FILE}`
+
+export const getGlobexDir = (workdir: string, projectId?: string): string =>
+  projectId ? getProjectDir(workdir, projectId) : getGlobexBaseDir(workdir)
+
+export const getStatePath = (workdir: string, projectId?: string): string =>
+  `${getProjectDir(workdir, projectId || DEFAULT_PROJECT)}/${STATE_FILE}`
 
 export class StateNotFoundError extends Schema.TaggedError<StateNotFoundError>()(
   "StateNotFoundError",
@@ -36,13 +53,24 @@ export const createInitialState = (projectName: string, description: string): Gl
   interviewHistory: {}
 })
 
+export interface ProjectInfo {
+  projectId: string
+  projectName: string
+  phase: Phase
+  updatedAt: string
+}
+
 export class GlobexPersistence extends Context.Tag("GlobexPersistence")<GlobexPersistence, {
-  readonly readState: (workdir: string) => Effect.Effect<GlobexState, StateNotFoundError | StateParseError>
-  readonly writeState: (workdir: string, state: GlobexState) => Effect.Effect<void, StateWriteError>
-  readonly stateExists: (workdir: string) => Effect.Effect<boolean>
-  readonly updatePhase: (workdir: string, phase: Phase) => Effect.Effect<GlobexState, StateNotFoundError | StateParseError | StateWriteError>
-  readonly recordApproval: (workdir: string, phase: "research" | "plan" | "features", approval: Approval) => Effect.Effect<GlobexState, StateNotFoundError | StateParseError | StateWriteError>
-  readonly recordArtifact: (workdir: string, name: string, filePath: string) => Effect.Effect<GlobexState, StateNotFoundError | StateParseError | StateWriteError>
+  readonly readState: (workdir: string, projectId?: string) => Effect.Effect<GlobexState, StateNotFoundError | StateParseError>
+  readonly writeState: (workdir: string, state: GlobexState, projectId?: string) => Effect.Effect<void, StateWriteError>
+  readonly stateExists: (workdir: string, projectId?: string) => Effect.Effect<boolean>
+  readonly updatePhase: (workdir: string, phase: Phase, projectId?: string) => Effect.Effect<GlobexState, StateNotFoundError | StateParseError | StateWriteError>
+  readonly recordApproval: (workdir: string, phase: "research" | "plan" | "features", approval: Approval, projectId?: string) => Effect.Effect<GlobexState, StateNotFoundError | StateParseError | StateWriteError>
+  readonly recordArtifact: (workdir: string, name: string, filePath: string, projectId?: string) => Effect.Effect<GlobexState, StateNotFoundError | StateParseError | StateWriteError>
+  readonly getActiveProject: (workdir: string) => Effect.Effect<string>
+  readonly setActiveProject: (workdir: string, projectId: string) => Effect.Effect<void, StateWriteError>
+  readonly listProjects: (workdir: string) => Effect.Effect<ProjectInfo[]>
+  readonly migrateIfNeeded: (workdir: string) => Effect.Effect<boolean, StateWriteError>
 }>() {}
 
 export const GlobexPersistenceLive = Layer.effect(
@@ -50,9 +78,32 @@ export const GlobexPersistenceLive = Layer.effect(
   Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem
 
-    const readState = (workdir: string): Effect.Effect<GlobexState, StateNotFoundError | StateParseError> => {
-      const path = getStatePath(workdir)
+    const getActiveProject = (workdir: string): Effect.Effect<string> =>
+      fs.readFileString(getActiveProjectPath(workdir)).pipe(
+        Effect.map((s) => s.trim()),
+        Effect.orElseSucceed(() => DEFAULT_PROJECT)
+      )
+
+    const setActiveProject = (workdir: string, projectId: string): Effect.Effect<void, StateWriteError> => {
+      const basePath = getGlobexBaseDir(workdir)
+      const activePath = getActiveProjectPath(workdir)
       return Effect.gen(function*() {
+        yield* fs.makeDirectory(basePath, { recursive: true }).pipe(
+          Effect.mapError((e) => new StateWriteError({ path: basePath, message: e.message }))
+        )
+        yield* fs.writeFileString(activePath, projectId).pipe(
+          Effect.mapError((e) => new StateWriteError({ path: activePath, message: e.message }))
+        )
+      })
+    }
+
+    const resolveProjectId = (workdir: string, projectId?: string): Effect.Effect<string> =>
+      projectId ? Effect.succeed(projectId) : getActiveProject(workdir)
+
+    const readState = (workdir: string, projectId?: string): Effect.Effect<GlobexState, StateNotFoundError | StateParseError> =>
+      Effect.gen(function*() {
+        const pid = yield* resolveProjectId(workdir, projectId)
+        const path = getStatePath(workdir, pid)
         const content = yield* fs.readFileString(path).pipe(
           Effect.mapError(() => new StateNotFoundError({ path }))
         )
@@ -61,13 +112,13 @@ export const GlobexPersistenceLive = Layer.effect(
           catch: (e) => new StateParseError({ message: e instanceof Error ? e.message : "Unknown parse error" })
         })
       })
-    }
 
-    const writeState = (workdir: string, state: GlobexState): Effect.Effect<void, StateWriteError> => {
-      const dir = getGlobexDir(workdir)
-      const path = getStatePath(workdir)
-      const updatedState = { ...state, updatedAt: new Date().toISOString() }
-      return Effect.gen(function*() {
+    const writeState = (workdir: string, state: GlobexState, projectId?: string): Effect.Effect<void, StateWriteError> =>
+      Effect.gen(function*() {
+        const pid = yield* resolveProjectId(workdir, projectId)
+        const dir = getProjectDir(workdir, pid)
+        const path = getStatePath(workdir, pid)
+        const updatedState = { ...state, updatedAt: new Date().toISOString() }
         yield* fs.makeDirectory(dir, { recursive: true }).pipe(
           Effect.mapError((e) => new StateWriteError({ path: dir, message: e.message }))
         )
@@ -75,41 +126,107 @@ export const GlobexPersistenceLive = Layer.effect(
           Effect.mapError((e) => new StateWriteError({ path, message: e.message }))
         )
       })
-    }
 
-    const stateExists = (workdir: string): Effect.Effect<boolean> => {
-      const path = getStatePath(workdir)
-      return fs.exists(path).pipe(Effect.orElseSucceed(() => false))
-    }
-
-    const updatePhase = (workdir: string, phase: Phase): Effect.Effect<GlobexState, StateNotFoundError | StateParseError | StateWriteError> =>
+    const stateExists = (workdir: string, projectId?: string): Effect.Effect<boolean> =>
       Effect.gen(function*() {
-        const state = yield* readState(workdir)
+        const pid = yield* resolveProjectId(workdir, projectId)
+        const path = getStatePath(workdir, pid)
+        return yield* fs.exists(path).pipe(Effect.orElseSucceed(() => false))
+      })
+
+    const updatePhase = (workdir: string, phase: Phase, projectId?: string): Effect.Effect<GlobexState, StateNotFoundError | StateParseError | StateWriteError> =>
+      Effect.gen(function*() {
+        const state = yield* readState(workdir, projectId)
         const updated = { ...state, currentPhase: phase }
-        yield* writeState(workdir, updated)
+        yield* writeState(workdir, updated, projectId)
         return { ...updated, updatedAt: new Date().toISOString() }
       })
 
-    const recordApproval = (workdir: string, phase: "research" | "plan" | "features", approval: Approval): Effect.Effect<GlobexState, StateNotFoundError | StateParseError | StateWriteError> =>
+    const recordApproval = (workdir: string, phase: "research" | "plan" | "features", approval: Approval, projectId?: string): Effect.Effect<GlobexState, StateNotFoundError | StateParseError | StateWriteError> =>
       Effect.gen(function*() {
-        const state = yield* readState(workdir)
+        const state = yield* readState(workdir, projectId)
         const updated: GlobexState = {
           ...state,
           approvals: { ...state.approvals, [phase]: approval }
         }
-        yield* writeState(workdir, updated)
+        yield* writeState(workdir, updated, projectId)
         return { ...updated, updatedAt: new Date().toISOString() }
       })
 
-    const recordArtifact = (workdir: string, name: string, filePath: string): Effect.Effect<GlobexState, StateNotFoundError | StateParseError | StateWriteError> =>
+    const recordArtifact = (workdir: string, name: string, filePath: string, projectId?: string): Effect.Effect<GlobexState, StateNotFoundError | StateParseError | StateWriteError> =>
       Effect.gen(function*() {
-        const state = yield* readState(workdir)
+        const state = yield* readState(workdir, projectId)
         const updated: GlobexState = {
           ...state,
           artifacts: { ...state.artifacts, [name]: filePath }
         }
-        yield* writeState(workdir, updated)
+        yield* writeState(workdir, updated, projectId)
         return { ...updated, updatedAt: new Date().toISOString() }
+      })
+
+    const listProjects = (workdir: string): Effect.Effect<ProjectInfo[]> =>
+      Effect.gen(function*() {
+        const projectsDir = `${getGlobexBaseDir(workdir)}/${PROJECTS_DIR}`
+        const exists = yield* fs.exists(projectsDir).pipe(Effect.orElseSucceed(() => false))
+        if (!exists) return []
+
+        const entries = yield* fs.readDirectory(projectsDir).pipe(Effect.orElseSucceed(() => []))
+        const projects: ProjectInfo[] = []
+
+        for (const name of entries) {
+          const statePath = `${projectsDir}/${name}/${STATE_FILE}`
+          const stateFileExists = yield* fs.exists(statePath).pipe(Effect.orElseSucceed(() => false))
+          if (stateFileExists) {
+            const content = yield* fs.readFileString(statePath).pipe(Effect.orElseSucceed(() => "{}"))
+            const state = JSON.parse(content) as Partial<GlobexState>
+            projects.push({
+              projectId: name,
+              projectName: state.projectName || name,
+              phase: state.currentPhase || "init",
+              updatedAt: state.updatedAt || ""
+            })
+          }
+        }
+        return projects
+      })
+
+    const migrateIfNeeded = (workdir: string): Effect.Effect<boolean, StateWriteError> =>
+      Effect.gen(function*() {
+        const legacyPath = getLegacyStatePath(workdir)
+        const legacyExists = yield* fs.exists(legacyPath).pipe(Effect.orElseSucceed(() => false))
+        if (!legacyExists) return false
+
+        const defaultDir = getProjectDir(workdir, DEFAULT_PROJECT)
+        const newPath = getStatePath(workdir, DEFAULT_PROJECT)
+        const newExists = yield* fs.exists(newPath).pipe(Effect.orElseSucceed(() => false))
+        if (newExists) return false
+
+        yield* fs.makeDirectory(defaultDir, { recursive: true }).pipe(
+          Effect.mapError((e) => new StateWriteError({ path: defaultDir, message: e.message }))
+        )
+
+        const content = yield* fs.readFileString(legacyPath).pipe(
+          Effect.mapError((e) => new StateWriteError({ path: legacyPath, message: e.message }))
+        )
+        yield* fs.writeFileString(newPath, content).pipe(
+          Effect.mapError((e) => new StateWriteError({ path: newPath, message: e.message }))
+        )
+
+        const artifactsToMigrate = ["research.md", "research.citations.json", "plan.md", "plan.risks.json", "features.json", "progress.md"]
+        const baseDir = getGlobexBaseDir(workdir)
+        for (const artifact of artifactsToMigrate) {
+          const oldPath = `${baseDir}/${artifact}`
+          const artifactExists = yield* fs.exists(oldPath).pipe(Effect.orElseSucceed(() => false))
+          if (artifactExists) {
+            const artifactContent = yield* fs.readFileString(oldPath).pipe(Effect.orElseSucceed(() => ""))
+            yield* fs.writeFileString(`${defaultDir}/${artifact}`, artifactContent).pipe(
+              Effect.mapError((e) => new StateWriteError({ path: `${defaultDir}/${artifact}`, message: e.message }))
+            )
+          }
+        }
+
+        yield* setActiveProject(workdir, DEFAULT_PROJECT)
+        return true
       })
 
     return {
@@ -118,7 +235,11 @@ export const GlobexPersistenceLive = Layer.effect(
       stateExists,
       updatePhase,
       recordApproval,
-      recordArtifact
+      recordArtifact,
+      getActiveProject,
+      setActiveProject,
+      listProjects,
+      migrateIfNeeded
     }
   })
 )

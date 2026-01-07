@@ -41,7 +41,7 @@ Named after Hank Scorpio's company. The "Ralph loop" is named after Ralph Wiggum
 - **Subagent isolation** — Research, interview, plan, and features phases run in isolated subagents
 - **Toast notifications** — Visual feedback on phase approvals and feature completions
 - **Session events** — Auto-detects existing projects, logs errors to progress.md
-- **37 tests** — Full coverage of state persistence and tools
+- **58 tests** — Full coverage of state persistence, tools, and integration
 
 ---
 
@@ -111,16 +111,21 @@ opencode
 
 ## Ralph Loop
 
-Stateless, autonomous execution. Each iteration:
+Coach/player pattern with two agents per iteration:
 
-1. **Get up to speed** — Read progress.md, features.json, git log
-2. **Health check** — Build passes? Tests pass?
-3. **Pick ONE feature** — Smallest eligible feature
-4. **Implement** — Follow existing patterns
-5. **Verify** — Automated checks
-6. **Pause** — Human manual verification
-7. **Commit** — Clean state for next iteration
-8. **Exit** — Loop restarts with fresh context
+1. **Ralph (player)** — Implements ONE feature, outputs `<ralph>DONE:FEATURE_ID</ralph>`
+2. **Wiggum (coach)** — Validates implementation against acceptance criteria
+   - Outputs `<wiggum>APPROVED</wiggum>` if all criteria pass
+   - Outputs `<wiggum>REJECTED:reason</wiggum>` with specific feedback
+3. On rejection, Ralph retries with feedback in next iteration
+4. Fresh context between iterations (stateless execution)
+
+```bash
+./scripts/ralph-loop.sh --max-iterations 50
+
+# Monitor in another terminal:
+tail -f .globex/ralph-loop.log
+```
 
 Loop continues until `<promise>ALL_FEATURES_COMPLETE</promise>`.
 
@@ -134,6 +139,14 @@ Features sized for ~50% of agent context window:
 | Files | 10-20 max |
 | Lines | ~500 max |
 | Dependencies | 0-2 features |
+
+### Feature States
+
+| State | Description |
+|:------|:------------|
+| `passes: false` | Not yet implemented |
+| `passes: true` | Implemented and verified |
+| `blocked: true` | Cannot progress (skipped by loop) |
 
 ### Erecting Signs
 
@@ -159,8 +172,8 @@ globex/
 │   └── tools/                   # 11 custom tools
 ├── skills/                      # Skill markdown files (reference)
 ├── scripts/
-│   └── ralph-loop.sh            # External loop wrapper
-├── tests/                       # 37 tests (state + tools)
+│   └── ralph-loop.sh            # Coach/player loop (Ralph + Wiggum)
+├── tests/                       # 58 tests (state, tools, integration)
 ├── opencode.json                # Plugin configuration
 └── package.json
 ```
@@ -191,7 +204,7 @@ globex/
 bun run check    # lint + build + test
 bun run lint     # oxlint
 bun run build    # tsc
-bun test         # 37 tests
+bun test         # 58 tests
 ```
 
 ---
@@ -206,7 +219,9 @@ bun test         # 37 tests
 ├── plan.md                 # Implementation plan
 ├── plan.risks.json         # Risk assessment with mitigations
 ├── features.json           # Feature list with pass/fail status
-└── progress.md             # Current progress, learnings
+├── progress.md             # Current progress, learnings
+├── errors.log              # Session errors
+└── ralph-loop.log          # Ralph loop execution log
 ```
 
 ---

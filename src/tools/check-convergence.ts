@@ -3,9 +3,12 @@ import { Effect } from "effect"
 import { readState, writeState } from "../state/persistence.js"
 import type { InterviewHistory } from "../state/types.js"
 
-const LIMITS: Record<string, { maxQuestions: number; timeboxMinutes: number }> = {
-  plan: { maxQuestions: 30, timeboxMinutes: 30 },
-  features: { maxQuestions: 20, timeboxMinutes: 15 },
+const MIN_QUESTIONS = 10
+const CONVERGENCE_ROUNDS_TO_STOP = 2
+
+const TIMEBOXES: Record<string, number> = {
+  plan: 30,
+  features: 15,
 }
 
 export const createCheckConvergence = (workdir: string): ToolDefinition => tool({
@@ -22,7 +25,7 @@ Returns JSON: {shouldStop, reason, questionsAsked, maxQuestions, elapsedMinutes,
   },
   async execute(args) {
     const phase = args.phase as "plan" | "features"
-    const phaseLimits = LIMITS[phase]
+    const timeboxMinutes = TIMEBOXES[phase]
     
     const effect = Effect.gen(function* () {
       const state = yield* readState(workdir)
@@ -51,27 +54,27 @@ Returns JSON: {shouldStop, reason, questionsAsked, maxQuestions, elapsedMinutes,
       yield* writeState(workdir, newState)
       
       const elapsedMinutes = parseDuration(updatedHistory.duration)
-      const shouldStop = 
-        updatedHistory.questionsAsked >= phaseLimits.maxQuestions ||
-        elapsedMinutes >= phaseLimits.timeboxMinutes ||
-        (!args.newGapsFound && updatedHistory.convergenceRound >= 2)
+      
+      const converged = updatedHistory.questionsAsked >= MIN_QUESTIONS && 
+        noNewGapsStreak >= CONVERGENCE_ROUNDS_TO_STOP
+      const timeboxExceeded = elapsedMinutes >= timeboxMinutes
+      const shouldStop = converged || timeboxExceeded
       
       const reason = shouldStop
-        ? updatedHistory.questionsAsked >= phaseLimits.maxQuestions
-          ? "max_questions_reached"
-          : elapsedMinutes >= phaseLimits.timeboxMinutes
-            ? "timebox_exceeded"
-            : "converged_no_new_gaps"
+        ? timeboxExceeded
+          ? "timebox_exceeded"
+          : "converged_no_new_gaps"
         : "continue"
       
       return {
         shouldStop,
         reason,
         questionsAsked: updatedHistory.questionsAsked,
-        maxQuestions: phaseLimits.maxQuestions,
+        minQuestions: MIN_QUESTIONS,
         elapsedMinutes,
-        timeboxMinutes: phaseLimits.timeboxMinutes,
+        timeboxMinutes,
         convergenceRound: updatedHistory.convergenceRound,
+        noNewGapsStreak,
       }
     })
     

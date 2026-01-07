@@ -3,7 +3,7 @@ import { Effect } from "effect"
 import * as fs from "node:fs/promises"
 import * as path from "node:path"
 import * as os from "node:os"
-import { createInitialState, writeState, getGlobexDir } from "../src/state/persistence"
+import { createInitialState, writeState, getProjectDir, setActiveProject, DEFAULT_PROJECT } from "../src/state/persistence"
 
 describe("tools", () => {
   let testDir: string
@@ -42,7 +42,7 @@ describe("tools", () => {
       )
       
       const result = await tool.execute(
-        { projectName: "test2", description: "desc2" },
+        { projectName: "test", description: "same name again" },
         mockContext()
       )
       
@@ -93,7 +93,7 @@ describe("tools", () => {
       expect(parsed.success).toBe(true)
       expect(parsed.artifact).toBe("research.md")
       
-      const artifactPath = path.join(getGlobexDir(testDir), "research.md")
+      const artifactPath = path.join(getProjectDir(testDir, DEFAULT_PROJECT), "research.md")
       const content = await fs.readFile(artifactPath, "utf-8")
       expect(content).toBe("# Research\n\nFindings here")
     })
@@ -370,7 +370,7 @@ describe("tools", () => {
       const parsed = JSON.parse(result)
       expect(parsed.success).toBe(true)
       
-      const progressPath = path.join(getGlobexDir(testDir), "progress.md")
+      const progressPath = path.join(getProjectDir(testDir, DEFAULT_PROJECT), "progress.md")
       const content = await fs.readFile(progressPath, "utf-8")
       expect(content).toContain("# Progress")
       expect(content).toContain("F001")
@@ -492,7 +492,7 @@ async function setupFeaturesFile(
   dir: string,
   opts: { allComplete?: boolean; blockedDeps?: boolean } = {}
 ) {
-  const globexDir = getGlobexDir(dir)
+  const globexDir = getProjectDir(dir, DEFAULT_PROJECT)
   await fs.mkdir(globexDir, { recursive: true })
   
   let features

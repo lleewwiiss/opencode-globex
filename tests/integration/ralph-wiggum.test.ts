@@ -2,7 +2,7 @@ import { describe, test, expect, beforeEach, afterEach } from "bun:test"
 import * as fs from "node:fs/promises"
 import * as path from "node:path"
 import * as os from "node:os"
-import { getGlobexDir } from "../../src/state/persistence"
+import { getProjectDir, DEFAULT_PROJECT } from "../../src/state/persistence"
 
 /**
  * Integration tests for the Ralph-Wiggum tool cycle:
@@ -75,7 +75,7 @@ describe("ralph-wiggum integration", () => {
       expect(parsed.progress).toContain("1/3")
 
       // Verify persisted
-      const featuresPath = path.join(getGlobexDir(testDir), "features.json")
+      const featuresPath = path.join(getProjectDir(testDir, DEFAULT_PROJECT), "features.json")
       const features = JSON.parse(await fs.readFile(featuresPath, "utf-8"))
       const f001 = features.features.find((f: any) => f.id === "MOCK-001")
       expect(f001.passes).toBe(true)
@@ -128,7 +128,7 @@ describe("ralph-wiggum integration", () => {
       expect(parsed.iteration).toBe(2) // incremented from 1
 
       // Verify progress.md content
-      const progressPath = path.join(getGlobexDir(testDir), "progress.md")
+      const progressPath = path.join(getProjectDir(testDir, DEFAULT_PROJECT), "progress.md")
       const content = await fs.readFile(progressPath, "utf-8")
       
       expect(content).toContain("# Progress")
@@ -201,7 +201,7 @@ describe("ralph-wiggum integration", () => {
       expect(parsed.blocked).toBe(true)
 
       // Verify persisted
-      const featuresPath = path.join(getGlobexDir(testDir), "features.json")
+      const featuresPath = path.join(getProjectDir(testDir, DEFAULT_PROJECT), "features.json")
       const features = JSON.parse(await fs.readFile(featuresPath, "utf-8"))
       const f001 = features.features.find((f: any) => f.id === "MOCK-001")
       expect(f001.blocked).toBe(true)
@@ -230,7 +230,7 @@ describe("ralph-wiggum integration", () => {
       )
 
       // Verify progress.md shows blocked
-      const progressPath = path.join(getGlobexDir(testDir), "progress.md")
+      const progressPath = path.join(getProjectDir(testDir, DEFAULT_PROJECT), "progress.md")
       const content = await fs.readFile(progressPath, "utf-8")
       
       expect(content).toContain("Blocked")
@@ -248,7 +248,7 @@ describe("ralph-wiggum integration", () => {
         mockContext()
       )
 
-      const progressPath = path.join(getGlobexDir(testDir), "progress.md")
+      const progressPath = path.join(getProjectDir(testDir, DEFAULT_PROJECT), "progress.md")
       const content = await fs.readFile(progressPath, "utf-8")
       
       expect(content).toContain("Recent Feedback")
@@ -273,7 +273,7 @@ describe("ralph-wiggum integration", () => {
 
     test("get_next_feature handles missing features.json", async () => {
       // Remove features.json
-      await fs.rm(path.join(getGlobexDir(testDir), "features.json"))
+      await fs.rm(path.join(getProjectDir(testDir, DEFAULT_PROJECT), "features.json"))
 
       const { createGetNextFeature } = await import("../../src/tools/get-next-feature")
       const tool = createGetNextFeature(testDir)
@@ -286,7 +286,7 @@ describe("ralph-wiggum integration", () => {
 
     test("circular dependencies return blocked state", async () => {
       // Modify fixture to have circular deps
-      const featuresPath = path.join(getGlobexDir(testDir), "features.json")
+      const featuresPath = path.join(getProjectDir(testDir, DEFAULT_PROJECT), "features.json")
       const features = JSON.parse(await fs.readFile(featuresPath, "utf-8"))
       
       // Make MOCK-001 depend on MOCK-002, creating cycle
@@ -325,7 +325,7 @@ describe("ralph-wiggum integration", () => {
       await tool.execute({ featureId: "MOCK-001", passes: true }, mockContext())
 
       // Verify fixture unchanged
-      const fixturePath = path.join(fixtureDir, ".globex/features.json")
+      const fixturePath = path.join(fixtureDir, ".globex/projects/default/features.json")
       const fixture = JSON.parse(await fs.readFile(fixturePath, "utf-8"))
       const f001 = fixture.features.find((f: any) => f.id === "MOCK-001")
       

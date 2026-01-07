@@ -2,7 +2,7 @@ import { tool, type ToolDefinition } from "@opencode-ai/plugin"
 import { Effect } from "effect"
 import * as fs from "node:fs/promises"
 import * as path from "node:path"
-import { getGlobexDir, readState, writeState } from "../state/persistence.js"
+import { getProjectDir, getActiveProject, readState, writeState } from "../state/persistence.js"
 
 interface Feature {
   id: string
@@ -29,12 +29,13 @@ export const createUpdateProgress = (workdir: string): ToolDefinition => tool({
     incrementIteration: tool.schema.boolean().optional(),
   },
   async execute(args) {
-    const globexDir = getGlobexDir(workdir)
-    const featuresPath = path.join(globexDir, "features.json")
-    const progressPath = path.join(globexDir, "progress.md")
-    
     const effect = Effect.gen(function* () {
-      const state = yield* readState(workdir)
+      const projectId = yield* getActiveProject(workdir)
+      const projectDir = getProjectDir(workdir, projectId)
+      const featuresPath = path.join(projectDir, "features.json")
+      const progressPath = path.join(projectDir, "progress.md")
+
+      const state = yield* readState(workdir, projectId)
       
       if (!state.execution) {
         state.execution = {
@@ -56,7 +57,7 @@ export const createUpdateProgress = (workdir: string): ToolDefinition => tool({
         state.execution.lastIterationAt = new Date().toISOString()
       }
       
-      yield* writeState(workdir, state)
+      yield* writeState(workdir, state, projectId)
       
       const content = yield* Effect.tryPromise(() => fs.readFile(featuresPath, "utf-8"))
       const data: FeaturesFile = JSON.parse(content)

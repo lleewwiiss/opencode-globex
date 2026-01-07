@@ -2,14 +2,26 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+GLOBEX_DIR="$PROJECT_DIR/.globex"
+LOG_FILE="$GLOBEX_DIR/ralph-loop.log"
 MAX_ITERATIONS=100
+
+# Read active project
+if [[ ! -f "$GLOBEX_DIR/active-project" ]]; then
+  echo "ERROR: No active project. Run /globex-init first." >&2
+  exit 1
+fi
+ACTIVE_PROJECT=$(cat "$GLOBEX_DIR/active-project")
+PROJECT_STATE_DIR="$GLOBEX_DIR/projects/$ACTIVE_PROJECT"
 COMPLETION_PROMISE="ALL_FEATURES_COMPLETE"
-MODEL="opencode/claude-opus-4-5"
-OUTPUT_FILE="/tmp/globex-ralph-output-$$.txt"
+MODEL="anthropic/claude-opus-4-5"
+RALPH_OUTPUT="/tmp/globex-ralph-output-$$.txt"
+WIGGUM_OUTPUT="/tmp/globex-wiggum-output-$$.txt"
 
 usage() {
   cat << 'EOF'
-Ralph Loop for Globex - External loop wrapper for OpenCode
+Ralph Loop for Globex - Coach/Player Execution
 
 USAGE:
   ./scripts/ralph-loop.sh [OPTIONS]
@@ -20,29 +32,30 @@ OPTIONS:
   -h, --help              Show this help message
 
 DESCRIPTION:
-  Runs the Globex Ralph loop by repeatedly invoking OpenCode with /globex-run.
-  Each iteration starts with fresh context, reads state from files, implements
-  ONE feature, commits, and exits. Loop continues until completion or max iterations.
+  Two-agent loop (coach/player pattern):
+  1. Ralph (player): Implements ONE feature, outputs <ralph>DONE:FEATURE_ID</ralph>
+  2. Wiggum (coach): Validates implementation against acceptance criteria
+     - Outputs <wiggum>APPROVED</wiggum> if all criteria pass
+     - Outputs <wiggum>REJECTED:reason</wiggum> with specific feedback
+  
+  On rejection, Ralph retries with feedback in next iteration.
+  Loop continues until ALL_FEATURES_COMPLETE.
 
 COMPLETION:
-  Loop stops when agent outputs: <promise>ALL_FEATURES_COMPLETE</promise>
-
-EXAMPLES:
-  ./scripts/ralph-loop.sh
-  ./scripts/ralph-loop.sh --max-iterations 50
-  ./scripts/ralph-loop.sh --model opencode/claude-sonnet-4
+  Loop stops when Ralph outputs: <promise>ALL_FEATURES_COMPLETE</promise>
 
 MONITORING:
-  # Watch progress in another terminal:
-  watch -n 5 'cat .globex/progress.md'
-
-  # View iteration count:
-  grep "^iteration:" .globex/state.json
+  tail -f .globex/ralph-loop.log
 
 STOPPING:
-  Ctrl+C to stop the loop at any time.
-  The codebase will be in a clean state (last commit).
+  Ctrl+C to stop. Codebase will be in clean state (last commit).
 EOF
+}
+
+log() {
+  local timestamp
+  timestamp="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  echo "[$timestamp] $*" | tee -a "$LOG_FILE"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -75,70 +88,97 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+mkdir -p "$GLOBEX_DIR"
+
 if ! command -v opencode &> /dev/null; then
-  echo "Error: opencode CLI not found. Install from https://opencode.ai" >&2
+  log "ERROR: opencode CLI not found. Install from https://opencode.ai"
   exit 1
 fi
 
-if [[ ! -f ".globex/state.json" ]]; then
-  echo "Error: .globex/state.json not found." >&2
-  echo "Run /globex-init first to initialize the project." >&2
+if [[ ! -f "$PROJECT_STATE_DIR/state.json" ]]; then
+  log "ERROR: Project state not found at $PROJECT_STATE_DIR/state.json"
+  log "Run /globex-init first."
   exit 1
 fi
 
-CURRENT_PHASE=$(jq -r '.currentPhase' .globex/state.json)
+CURRENT_PHASE=$(jq -r '.currentPhase' "$PROJECT_STATE_DIR/state.json")
 if [[ "$CURRENT_PHASE" != "execute" ]]; then
-  echo "Error: Current phase is '$CURRENT_PHASE', expected 'execute'." >&2
-  echo "Complete research → plan → features phases first." >&2
+  log "ERROR: Current phase is '$CURRENT_PHASE', expected 'execute'."
   exit 1
 fi
 
-echo "╔════════════════════════════════════════════════════════════╗"
-echo "║  Globex Ralph Loop                                         ║"
-echo "╠════════════════════════════════════════════════════════════╣"
-echo "║  Max iterations: $MAX_ITERATIONS"
-echo "║  Model: $MODEL"
-echo "║  Completion: <promise>$COMPLETION_PROMISE</promise>"
-echo "╚════════════════════════════════════════════════════════════╝"
-echo ""
+log "════════════════════════════════════════════════════════════"
+log "  Ralph Loop Started (Coach/Player Pattern)"
+log "  Project: $ACTIVE_PROJECT"
+log "  Max iterations: $MAX_ITERATIONS"
+log "  Model: $MODEL"
+log "════════════════════════════════════════════════════════════"
 
 ITERATION=1
 
 cleanup() {
-  rm -f "$OUTPUT_FILE"
-  echo ""
-  echo "Ralph loop stopped at iteration $ITERATION"
-  echo "Codebase is in clean state (last commit)."
+  rm -f "$RALPH_OUTPUT" "$WIGGUM_OUTPUT"
+  log "Loop stopped at iteration $ITERATION"
 }
 trap cleanup EXIT
 
 while [[ $ITERATION -le $MAX_ITERATIONS ]]; do
-  echo "────────────────────────────────────────────────────────────"
-  echo "🔄 Iteration $ITERATION / $MAX_ITERATIONS"
-  echo "────────────────────────────────────────────────────────────"
+  log "────────────────────────────────────────────────────────────"
+  log "Iteration $ITERATION / $MAX_ITERATIONS"
+  log "────────────────────────────────────────────────────────────"
   
-  opencode run -m "$MODEL" "/globex-run" 2>&1 | tee "$OUTPUT_FILE"
+  # --- RALPH (PLAYER) PHASE ---
+  log "RALPH: Starting implementation..."
+  opencode run --agent globex-ralph -m "$MODEL" "Execute ONE autonomous Ralph loop iteration." 2>&1 | tee "$RALPH_OUTPUT" || true
   
-  if grep -q "<promise>$COMPLETION_PROMISE</promise>" "$OUTPUT_FILE"; then
-    echo ""
-    echo "════════════════════════════════════════════════════════════"
-    echo "✅ Ralph loop complete!"
-    echo "   Detected: <promise>$COMPLETION_PROMISE</promise>"
-    echo "   Total iterations: $ITERATION"
-    echo "════════════════════════════════════════════════════════════"
+  # Check for completion
+  if grep -q "<promise>$COMPLETION_PROMISE</promise>" "$RALPH_OUTPUT"; then
+    log "════════════════════════════════════════════════════════════"
+    log "COMPLETE: All features implemented!"
+    log "Total iterations: $ITERATION"
+    log "════════════════════════════════════════════════════════════"
     exit 0
+  fi
+  
+  # Parse Ralph output for feature ID
+  FEATURE_ID=""
+  if grep -qoE '<ralph>DONE:[^<]+</ralph>' "$RALPH_OUTPUT"; then
+    FEATURE_ID=$(grep -oE '<ralph>DONE:[^<]+</ralph>' "$RALPH_OUTPUT" | sed 's/<ralph>DONE://;s/<\/ralph>//')
+  fi
+  
+  if [[ -z "$FEATURE_ID" ]]; then
+    log "RALPH: No DONE tag found. Retrying next iteration."
+    ITERATION=$((ITERATION + 1))
+    sleep 3
+    continue
+  fi
+  
+  log "RALPH: Completed $FEATURE_ID"
+  
+  # --- WIGGUM (COACH) PHASE ---
+  log "WIGGUM: Starting validation of $FEATURE_ID..."
+  WIGGUM_PROMPT="Validate feature $FEATURE_ID implementation. Check acceptance criteria in .globex/projects/$ACTIVE_PROJECT/features.json. Output <wiggum>APPROVED</wiggum> if all criteria pass, or <wiggum>REJECTED:reason</wiggum> with specific feedback."
+  opencode run --agent globex-wiggum -m "$MODEL" "$WIGGUM_PROMPT" 2>&1 | tee "$WIGGUM_OUTPUT" || true
+  
+  # Parse Wiggum output
+  if grep -q '<wiggum>APPROVED</wiggum>' "$WIGGUM_OUTPUT"; then
+    log "WIGGUM: APPROVED - $FEATURE_ID validated"
+  elif grep -qoE '<wiggum>REJECTED:[^<]+</wiggum>' "$WIGGUM_OUTPUT"; then
+    REJECTION=$(grep -oE '<wiggum>REJECTED:[^<]+</wiggum>' "$WIGGUM_OUTPUT" | sed 's/<wiggum>REJECTED://;s/<\/wiggum>//')
+    log "WIGGUM: REJECTED - $REJECTION"
+    log "Feedback will be used in next iteration."
+  else
+    log "WIGGUM: No verdict tag found. Proceeding."
   fi
   
   ITERATION=$((ITERATION + 1))
   
-  echo ""
-  echo "Iteration complete. Starting fresh context in 3s..."
+  log "Iteration complete. Fresh context in 3s..."
   sleep 3
 done
 
-echo ""
-echo "════════════════════════════════════════════════════════════"
-echo "⚠️  Max iterations ($MAX_ITERATIONS) reached."
-echo "   Ralph loop stopped. Review .globex/progress.md for status."
-echo "════════════════════════════════════════════════════════════"
+log "════════════════════════════════════════════════════════════"
+log "WARNING: Max iterations ($MAX_ITERATIONS) reached."
+log "Review .globex/progress.md for status."
+log "════════════════════════════════════════════════════════════"
 exit 1

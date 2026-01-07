@@ -174,12 +174,20 @@ describe("state persistence", () => {
   })
 
   describe("path helpers", () => {
-    test("getGlobexDir returns correct path", () => {
+    test("getGlobexDir returns base path without projectId", () => {
       expect(getGlobexDir("/foo/bar")).toBe("/foo/bar/.globex")
     })
 
-    test("getStatePath returns correct path", () => {
-      expect(getStatePath("/foo/bar")).toBe("/foo/bar/.globex/state.json")
+    test("getGlobexDir returns project path with projectId", () => {
+      expect(getGlobexDir("/foo/bar", "myproject")).toBe("/foo/bar/.globex/projects/myproject")
+    })
+
+    test("getStatePath returns correct path for default project", () => {
+      expect(getStatePath("/foo/bar")).toBe("/foo/bar/.globex/projects/default/state.json")
+    })
+
+    test("getStatePath returns correct path with projectId", () => {
+      expect(getStatePath("/foo/bar", "myproject")).toBe("/foo/bar/.globex/projects/myproject/state.json")
     })
   })
 })
