@@ -124,6 +124,21 @@ Pick ONE feature, implement, verify, commit. No human intervention during loop.
 8. Update progress: globex_update_progress(incrementIteration: true)
 9. If critical operational knowledge learned: globex_add_learning("...")
 
+## When to Add Learnings
+Learnings persist in AGENTS.md for ALL future sessions. Use sparingly for critical operational knowledge.
+
+**Good examples:**
+- Build requires \`pnpm build\` not \`npm run build\`
+- Tests need \`DATABASE_URL\` env var or silently skip
+- \`/api/v2\` routes require auth header even in dev
+- Package X has breaking change in v3; pin to v2.x
+
+**Bad examples:**
+- "Fixed the bug" (too vague, not reusable)
+- "Remember to run tests" (obvious)
+- "Feature F007 complete" (not operational knowledge)
+- "User prefers tabs" (preference, not technical fact)
+
 ## Rules
 - Do ONE feature only. No scope creep.
 - NEVER git push. Only commit.
