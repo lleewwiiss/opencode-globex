@@ -89,7 +89,9 @@ describe("tools", () => {
         mockContext()
       )
       
-      expect(result).toContain("Saved artifact")
+      const parsed = JSON.parse(result)
+      expect(parsed.success).toBe(true)
+      expect(parsed.artifact).toBe("research.md")
       
       const artifactPath = path.join(getGlobexDir(testDir), "research.md")
       const content = await fs.readFile(artifactPath, "utf-8")
@@ -164,6 +166,38 @@ describe("tools", () => {
       expect(parsed.success).toBe(true)
       expect(parsed.passes).toBe(true)
       expect(parsed.progress).toContain("1/2")
+    })
+
+    test("updates feature blocked status", async () => {
+      await setupFeaturesFile(testDir)
+      
+      const { createUpdateFeature } = await import("../src/tools/update-feature")
+      const tool = createUpdateFeature(testDir)
+      
+      const result = await tool.execute(
+        { featureId: "F001", blocked: true, blockedReason: "Missing dependency" },
+        mockContext()
+      )
+      
+      const parsed = JSON.parse(result)
+      expect(parsed.success).toBe(true)
+      expect(parsed.blocked).toBe(true)
+    })
+
+    test("requires passes or blocked status", async () => {
+      await setupFeaturesFile(testDir)
+      
+      const { createUpdateFeature } = await import("../src/tools/update-feature")
+      const tool = createUpdateFeature(testDir)
+      
+      const result = await tool.execute(
+        { featureId: "F001", notes: "just a note" },
+        mockContext()
+      )
+      
+      const parsed = JSON.parse(result)
+      expect(parsed.success).toBe(false)
+      expect(parsed.error).toContain("Must provide either")
     })
 
     test("returns error for nonexistent feature", async () => {

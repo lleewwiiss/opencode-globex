@@ -45,7 +45,7 @@ describe("state persistence", () => {
 
   describe("stateExists", () => {
     test("returns false when no state file", async () => {
-      const exists = await Effect.runPromise(stateExists(testDir))
+      const exists = await stateExists(testDir)
       expect(exists).toBe(false)
     })
 
@@ -53,7 +53,7 @@ describe("state persistence", () => {
       const state = createInitialState("test", "desc")
       await Effect.runPromise(writeState(testDir, state))
       
-      const exists = await Effect.runPromise(stateExists(testDir))
+      const exists = await stateExists(testDir)
       expect(exists).toBe(true)
     })
   })

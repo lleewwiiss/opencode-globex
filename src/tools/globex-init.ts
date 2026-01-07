@@ -9,7 +9,7 @@ export const createGlobexInit = (workdir: string): ToolDefinition => tool({
     description: tool.schema.string(),
   },
   async execute(args) {
-    const exists = await Effect.runPromise(stateExists(workdir))
+    const exists = await stateExists(workdir)
     
     if (exists) {
       return JSON.stringify({
@@ -19,15 +19,20 @@ export const createGlobexInit = (workdir: string): ToolDefinition => tool({
       })
     }
     
-    const state = createInitialState(args.projectName, args.description)
-    await Effect.runPromise(writeState(workdir, state))
-    
-    return JSON.stringify({
-      success: true,
-      projectName: args.projectName,
-      phase: state.currentPhase,
-      globexDir: getGlobexDir(workdir),
-      nextStep: "Run /globex-research to explore the codebase",
+    const effect = Effect.gen(function* () {
+      const state = createInitialState(args.projectName, args.description)
+      yield* writeState(workdir, state)
+      
+      return {
+        success: true,
+        projectName: args.projectName,
+        phase: state.currentPhase,
+        globexDir: getGlobexDir(workdir),
+        nextStep: "Run /globex-research to explore the codebase",
+      }
     })
+    
+    const result = await Effect.runPromise(effect)
+    return JSON.stringify(result)
   },
 })

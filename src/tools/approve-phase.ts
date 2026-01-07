@@ -10,7 +10,11 @@ const NEXT_PHASE: Record<string, Phase> = {
 }
 
 export const createApprovePhase = (workdir: string): ToolDefinition => tool({
-  description: "Record human approval for a globex phase (research, plan, or features)",
+  description: `Record human approval decision for a globex phase (research, plan, or features).
+
+On approved/approved_with_risks: transitions to next phase (research→plan→features→execute).
+On rejected: stays at current phase for rework.
+Returns: "Phase {phase} {status}. Current phase: {currentPhase}"`,
   args: {
     phase: tool.schema.enum(["research", "plan", "features"]),
     status: tool.schema.enum(["approved", "approved_with_risks", "rejected"]),

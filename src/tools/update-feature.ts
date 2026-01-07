@@ -18,14 +18,28 @@ interface FeaturesFile {
 }
 
 export const createUpdateFeature = (workdir: string): ToolDefinition => tool({
-  description: "Update a feature's status in features.json (mark as passes=true after implementation)",
+  description: `Update a feature's completion status in features.json.
+
+ALLOWED FIELDS ONLY: passes, blocked, blockedReason, notes.
+This tool intentionally prevents modification of feature requirements (description, acceptanceCriteria, dependencies, etc.) to maintain spec integrity.
+
+Returns: { success, featureId, passes, blocked, progress, remaining }`,
   args: {
     featureId: tool.schema.string(),
-    passes: tool.schema.boolean(),
+    passes: tool.schema.boolean().optional(),
+    blocked: tool.schema.boolean().optional(),
+    blockedReason: tool.schema.string().optional(),
     notes: tool.schema.string().optional(),
   },
   async execute(args) {
     const featuresPath = path.join(getGlobexDir(workdir), "features.json")
+
+    if (args.passes === undefined && args.blocked === undefined) {
+      return JSON.stringify({
+        success: false,
+        error: "Must provide either 'passes' or 'blocked' status",
+      })
+    }
     
     try {
       const content = await fs.readFile(featuresPath, "utf-8")
@@ -38,12 +52,25 @@ export const createUpdateFeature = (workdir: string): ToolDefinition => tool({
           error: `Feature ${args.featureId} not found`,
         })
       }
+
+      const feature = data.features[featureIndex]
       
-      data.features[featureIndex] = {
-        ...data.features[featureIndex],
-        passes: args.passes,
-        completedAt: args.passes ? new Date().toISOString() : undefined,
-        notes: args.notes,
+      if (args.passes !== undefined) {
+        feature.passes = args.passes
+        if (args.passes) {
+          feature.completedAt = new Date().toISOString()
+        }
+      }
+      
+      if (args.blocked !== undefined) {
+        feature.blocked = args.blocked
+        if (args.blockedReason) {
+          feature.blockedReason = args.blockedReason
+        }
+      }
+      
+      if (args.notes !== undefined) {
+        feature.notes = args.notes
       }
       
       await fs.writeFile(featuresPath, JSON.stringify(data, null, 2))
@@ -54,7 +81,8 @@ export const createUpdateFeature = (workdir: string): ToolDefinition => tool({
       return JSON.stringify({
         success: true,
         featureId: args.featureId,
-        passes: args.passes,
+        passes: feature.passes,
+        blocked: feature.blocked,
         progress: `${total - remaining}/${total} complete`,
         remaining,
       })

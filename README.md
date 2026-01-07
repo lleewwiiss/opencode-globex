@@ -35,6 +35,14 @@ Named after Hank Scorpio's company. The "Ralph loop" is named after Ralph Wiggum
 - [Geoffrey Huntley: Ralph Driven Development](https://ghuntley.com/ralph/)
 - [Anthropic: Ralph Wiggum Plugin](https://github.com/anthropics/claude-code/tree/main/plugins/ralph-wiggum)
 
+## Features
+
+- **Automatic command registration** — All `/globex-*` commands register via plugin config hook
+- **Subagent isolation** — Research, interview, plan, and features phases run in isolated subagents
+- **Toast notifications** — Visual feedback on phase approvals and feature completions
+- **Session events** — Auto-detects existing projects, logs errors to progress.md
+- **37 tests** — Full coverage of state persistence and tools
+
 ---
 
 ## Flow
@@ -78,20 +86,25 @@ opencode
 ### Research → Plan → Features
 
 ```bash
-> /globex-research      # Agent explores codebase
-> /globex-interview     # Human validates research
+> /globex-research      # Subagent explores codebase (read-only)
+> /globex-interview     # Subagent validates research with human
 
-> /globex-plan          # Agent creates implementation plan  
-> /globex-interview     # Human validates plan
+> /globex-plan          # Subagent creates implementation plan  
+> /globex-interview     # Subagent validates plan with human
 
-> /globex-features      # Agent breaks into atomic features
-> /globex-interview     # Human validates features
+> /globex-features      # Subagent breaks into atomic features
+> /globex-interview     # Subagent validates features with human
+
+> /globex-status        # Check current phase anytime
+> /globex-help          # Show workflow help
 ```
 
 ### Execute
 
 ```bash
 ./scripts/ralph-loop.sh --max-iterations 50
+
+# To stop the loop, press Ctrl+C
 ```
 
 ---
@@ -127,7 +140,7 @@ Features sized for ~50% of agent context window:
 Agent persists operational knowledge for future iterations:
 
 ```
-globex_update_progress(learning: "Run migrations before seeding")
+globex_add_learning(learning: "Run migrations before seeding")
 ```
 
 ---
@@ -137,16 +150,18 @@ globex_update_progress(learning: "Run migrations before seeding")
 ```
 globex/
 ├── src/
-│   ├── index.ts                 # Plugin entry
+│   ├── index.ts                 # Plugin entry (commands, agents, events)
 │   ├── state/
 │   │   ├── types.ts             # Phase, ExecutionState types
-│   │   └── persistence.ts       # State CRUD
-│   └── tools/                   # 9 custom tools
-├── skills/                      # 7 skill markdown files
+│   │   ├── schema.ts            # Effect Schema definitions
+│   │   ├── service.ts           # GlobexPersistence service layer
+│   │   └── persistence.ts       # State CRUD (re-exports from service)
+│   └── tools/                   # 11 custom tools
+├── skills/                      # Skill markdown files (reference)
 ├── scripts/
 │   └── ralph-loop.sh            # External loop wrapper
-├── tests/                       # 35 tests
-├── opencode.json                # Skill registrations
+├── tests/                       # 37 tests (state + tools)
+├── opencode.json                # Plugin configuration
 └── package.json
 ```
 
@@ -156,15 +171,17 @@ globex/
 
 | Tool | Description |
 |:-----|:------------|
-| `globex_init` | Initialize project |
-| `globex_status` | Get current phase |
-| `globex_save_artifact` | Save .md/.json files |
-| `globex_approve_phase` | Record approval, transition |
-| `globex_verify_citation` | Validate file:line citations |
-| `globex_check_convergence` | Track interview progress |
-| `globex_update_feature` | Mark feature complete |
-| `globex_get_next_feature` | Pick next eligible feature |
-| `globex_update_progress` | Update progress, add learnings |
+| `globex_init` | Initialize project with name and description |
+| `globex_status` | Get current phase and project state |
+| `globex_save_artifact` | Save .md/.json files to .globex/ |
+| `globex_approve_phase` | Record approval decision, transition phase |
+| `globex_verify_citation` | Validate file:line citations exist |
+| `globex_check_convergence` | Track interview progress toward completion |
+| `globex_update_feature` | Mark feature as complete/blocked |
+| `globex_get_next_feature` | Pick next eligible feature by priority |
+| `globex_update_progress` | Generate progress.md with current state |
+| `globex_add_learning` | Write operational knowledge to AGENTS.md |
+| `globex_set_phase` | Manually set workflow phase |
 
 ---
 
@@ -174,7 +191,7 @@ globex/
 bun run check    # lint + build + test
 bun run lint     # oxlint
 bun run build    # tsc
-bun test         # 35 tests
+bun test         # 37 tests
 ```
 
 ---
@@ -183,11 +200,13 @@ bun test         # 35 tests
 
 ```
 .globex/
-├── state.json       # Phase, approvals, execution state
-├── research.md      # Research findings
-├── plan.md          # Implementation plan
-├── features.json    # Feature list with pass/fail
-└── progress.md      # Current progress, learnings
+├── state.json              # Phase, approvals, execution state
+├── research.md             # Research findings
+├── research.citations.json # File:line citations for research claims
+├── plan.md                 # Implementation plan
+├── plan.risks.json         # Risk assessment with mitigations
+├── features.json           # Feature list with pass/fail status
+└── progress.md             # Current progress, learnings
 ```
 
 ---

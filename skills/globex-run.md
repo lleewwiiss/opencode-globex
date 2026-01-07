@@ -1,243 +1,167 @@
 ---
 name: globex-run
-description: Executes ONE iteration of the Ralph loop. Reads fresh state, picks one feature, implements, verifies, commits, exits. Designed for stateless external loop execution via scripts/ralph-loop.sh.
+description: Executes ONE autonomous iteration of the Ralph loop. Picks one feature, implements, verifies via CLI/tests, commits. No human intervention during loop. Designed for external loop execution.
 ---
 
 # Ralph Loop Iteration
 
-Executes a single, stateless iteration. External loop calls this repeatedly until completion.
-
-## Philosophy
-
-From Geoffrey Huntley's Ralph: "Deterministically bad means failures are predictable and informative."
-
-- **Stateless**: Each invocation reads fresh state from files
-- **Atomic**: ONE feature per iteration
-- **Clean exit**: Leave codebase in committable state
-- **Erecting signs**: Write learnings for future iterations
+Fully autonomous. No human intervention. Human reviews commits AFTER loop completes.
 
 ## Tools
 
-- `globex_status` - verify phase is `execute`
 - `globex_get_next_feature` - pick next eligible feature
 - `globex_update_feature` - mark feature complete
-- `globex_update_progress` - update progress.md, add learnings, track iteration
+- `globex_update_progress` - track iteration, add learnings
+- `globex_add_learning` - write critical discoveries to AGENTS.md
 
-## Getting Up to Speed (MANDATORY)
-
-Every iteration starts fresh. Before ANY implementation:
-
-```
-1. globex_status()              → Verify execute phase
-2. Read .globex/progress.md     → What happened, what's blocked, LEARNINGS
-3. Read .globex/features.json   → Current feature states
-4. git log --oneline -10        → Recent commits
-5. Run health check             → Build passes? Tests pass?
-```
-
-If health check fails, fix FIRST before picking new feature.
-
-## Single Iteration Flow
+## The Loop (One Iteration)
 
 ```
-┌─────────────────────────────────────────────┐
-│  1. GET UP TO SPEED (read state fresh)      │
-├─────────────────────────────────────────────┤
-│  2. HEALTH CHECK (build/test)               │
-│     └─ If broken → fix first, commit, exit  │
-├─────────────────────────────────────────────┤
-│  3. PICK ONE FEATURE                        │
-│     └─ globex_get_next_feature()            │
-│     └─ If done → output completion promise  │
-├─────────────────────────────────────────────┤
-│  4. IMPLEMENT (one feature only)            │
-│     └─ Follow existing patterns             │
-│     └─ Run lsp_diagnostics                  │
-├─────────────────────────────────────────────┤
-│  5. VERIFY                                  │
-│     └─ Automated checks from feature        │
-│     └─ If fail → fix and re-verify          │
-├─────────────────────────────────────────────┤
-│  6. MANUAL VERIFICATION PAUSE               │
-│     └─ STOP and wait for human              │
-├─────────────────────────────────────────────┤
-│  7. COMMIT & UPDATE                         │
-│     └─ git commit (never push)              │
-│     └─ Mark feature complete                │
-│     └─ Update progress.md                   │
-├─────────────────────────────────────────────┤
-│  8. EXIT (loop will restart fresh)          │
-└─────────────────────────────────────────────┘
+READ .globex/progress.md and .globex/features.json
+Pick ONE feature: passes=false, deps satisfied, highest priority
+Implement following existing codebase patterns
+Verify via CLI/test output (build, tests, lint)
+If verify fails: fix and retry (max 3 attempts), then mark blocked
+Commit: git add . && git commit -m "feat(globex): [id] - [description]"
+Mark complete: globex_update_feature(featureId, passes: true)
+Update progress: globex_update_progress(incrementIteration: true)
+If critical operational detail learned: globex_add_learning("...")
+If all features done: <promise>ALL_FEATURES_COMPLETE</promise>
+NEVER GIT PUSH. ONLY COMMIT.
 ```
 
-## Execution
+## Execution Steps
 
-### 1. Get Up to Speed
-
-```
-globex_status()
-```
-
-Read `.globex/progress.md` - pay attention to:
-- Current iteration number
-- Learnings from previous iterations
-- Blocked features and why
-
-Read `.globex/features.json` - understand scope.
-
-```bash
-git log --oneline -10
-```
-
-### 2. Health Check
-
-Run project's build and test commands:
-
-```bash
-# Example - adapt to project
-npm run build
-npm test
-```
-
-If either fails:
-1. Fix the issue
-2. Commit the fix: `git commit -m "fix: [what broke]"`
-3. Add learning: `globex_update_progress(learning: "Build requires X before Y")`
-4. Exit - loop will restart fresh
-
-### 3. Pick One Feature
+### 1. Get Bearings
 
 ```
-result = globex_get_next_feature()
+globex_get_next_feature()
 ```
 
-**If `result.done: true`:**
+Read `.globex/progress.md` - check learnings from previous iterations.
+
+Optionally, run `git log --oneline -20` to understand recent changes before implementing.
+
+**If `done: true`:**
 ```
 <promise>ALL_FEATURES_COMPLETE</promise>
-
-Ralph loop complete. All features implemented and verified.
 ```
 
-**If `result.blocked: true`:**
-Report blocked features and exit. Human intervention needed.
+**If `blocked: true`:**
+Exit with blocked status. Loop will retry next iteration.
 
-**Otherwise:**
-```
-globex_update_progress(currentFeatureId: result.feature.id)
-```
-
-### 4. Implement Feature
+### 2. Implement Feature
 
 For each file in `feature.filesTouched`:
-1. Read the file completely
+1. Read file completely
 2. Implement changes following existing patterns
-3. Run `lsp_diagnostics` after each file
+3. Run `lsp_diagnostics` after changes
 
-CRITICAL: Do NOT try to do more than this one feature.
+Do ONE feature only. Do not scope creep.
 
-### 5. Verify
+### 3. Verify (Automated Only)
 
-Run all checks from `feature.verification.automated`:
-
+Run automated checks:
 ```bash
-# Examples
-npm run build
-npm test
-curl -X GET localhost:3000/api/health
+# Adapt to project
+npm run build    # or bun run build
+npm test         # or bun test
+npm run lint     # or equivalent
 ```
 
-If any fail:
+**If pass:** Continue to commit.
+
+**If fail:** 
 1. Fix the issue
 2. Re-verify
-3. If stuck after 3 attempts, add to blocked and exit
+3. After 3 failed attempts: mark feature blocked, exit
 
-### 6. Manual Verification Pause
-
-**STOP. Do not proceed without human confirmation.**
-
-```
-Feature [ID] automated verification complete.
-
-Manual verification required:
-- [ ] [Check 1 from feature.verification.manual]
-- [ ] [Check 2 from feature.verification.manual]
-
-Reply "done" when verified, or describe issues.
-```
-
-### 7. Commit & Update
-
-After human confirms:
-
-```
-globex_update_feature(featureId: feature.id, passes: true)
-```
+### 4. Commit
 
 ```bash
 git add .
 git commit -m "feat(globex): [feature.id] - [feature.description]"
 ```
 
-If you learned something operational, erect a sign:
-```
-globex_update_progress(
-  currentFeatureId: null,
-  incrementIteration: true,
-  learning: "Run migrations before seeding test data"
-)
-```
+**NEVER push.** Human reviews and pushes after loop completes.
 
-### 8. Exit
-
-Exit cleanly. The external loop will restart with fresh context.
+### 5. Update State
 
 ```
-Iteration [N] complete. Feature [ID] implemented and committed.
-Exiting for fresh context.
+globex_update_feature(featureId: feature.id, passes: true)
+globex_update_progress(incrementIteration: true)
 ```
 
-## Erecting Signs
+### 6. Erect Signs (If Learned Something)
 
-When you discover operational knowledge, save it:
+If you discovered critical operational knowledge:
 
 ```
-globex_update_progress(learning: "...")
+globex_add_learning("Run migrations before seeding: bun run db:migrate")
 ```
+
+This writes to `AGENTS.md` so ALL future sessions benefit, not just this loop.
 
 Good learnings:
 - Build commands that work
+- Environment setup requirements
 - Order of operations that matter
-- Environment setup gotchas
-- Test data requirements
+- Non-obvious dependencies
 
 Bad learnings:
+- Feature-specific details (those go in commit message)
 - Obvious things
-- Feature-specific details (those go in the commit)
 
-## Completion Promise
+### 7. Exit
 
-When all features are done, output exactly:
+Exit cleanly. External loop will restart with fresh context.
+
+```
+Iteration complete. Feature [ID] committed.
+```
+
+## Running the Ralph-Wiggum Loop
+
+Two-agent loop with validation:
+
+```
+Ralph (implements) → Wiggum (validates) → feedback loop → next feature
+```
+
+**Flow:**
+1. Ralph picks ONE feature, implements, commits, outputs `<ralph>DONE:FEATURE_ID</ralph>`
+2. Wiggum validates against acceptance criteria
+3. If `<wiggum>APPROVED</wiggum>` → next feature
+4. If `<wiggum>REJECTED:reason</wiggum>` → Ralph retries with feedback
+5. Loop continues until `<promise>ALL_FEATURES_COMPLETE</promise>`
+
+**Quick start:**
+```bash
+./scripts/ralph-wiggum-loop.sh
+```
+
+**Options:**
+```bash
+./scripts/ralph-wiggum-loop.sh --max-iterations 50
+./scripts/ralph-wiggum-loop.sh --model opencode/claude-sonnet-4
+```
+
+**Monitoring:**
+```bash
+tail -f .globex/ralph-wiggum.log
+```
+
+**Stop:** Ctrl+C (codebase remains in clean committed state)
+
+## Completion
+
+When all features pass:
 
 ```
 <promise>ALL_FEATURES_COMPLETE</promise>
-```
 
-This signals the external loop to stop.
-
-## Running the Loop
-
-Use the external loop script:
-
-```bash
-./scripts/ralph-loop.sh --max-iterations 50
-```
-
-Or manually:
-```bash
-while true; do
-  opencode run "/globex-run"
-  if grep -q "ALL_FEATURES_COMPLETE" /tmp/last-output; then
-    break
-  fi
-done
+Ralph loop complete.
+Completed: X features
+Commits: Y
+Review commits with: git log --oneline
 ```

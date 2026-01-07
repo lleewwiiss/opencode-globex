@@ -1,7 +1,8 @@
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
+import { Effect } from "effect"
 import * as fs from "node:fs/promises"
 import * as path from "node:path"
-import { getGlobexDir, loadState, saveState } from "../state/persistence.js"
+import { getGlobexDir, readState, writeState } from "../state/persistence.js"
 
 interface Feature {
   id: string
@@ -32,8 +33,9 @@ export const createUpdateProgress = (workdir: string): ToolDefinition => tool({
     const featuresPath = path.join(globexDir, "features.json")
     const progressPath = path.join(globexDir, "progress.md")
     
-    try {
-      const state = await loadState(workdir)
+    const effect = Effect.gen(function* () {
+      const state = yield* readState(workdir)
+      
       if (!state.execution) {
         state.execution = {
           iteration: 1,
@@ -54,9 +56,9 @@ export const createUpdateProgress = (workdir: string): ToolDefinition => tool({
         state.execution.lastIterationAt = new Date().toISOString()
       }
       
-      await saveState(workdir, state)
+      yield* writeState(workdir, state)
       
-      const content = await fs.readFile(featuresPath, "utf-8")
+      const content = yield* Effect.tryPromise(() => fs.readFile(featuresPath, "utf-8"))
       const data: FeaturesFile = JSON.parse(content)
       
       const completed = data.features
@@ -116,9 +118,9 @@ ${learningsSection}
 Last updated: ${new Date().toISOString()}
 `
       
-      await fs.writeFile(progressPath, md)
+      yield* Effect.tryPromise(() => fs.writeFile(progressPath, md))
       
-      return JSON.stringify({
+      return {
         success: true,
         path: progressPath,
         completed: completed.length,
@@ -126,12 +128,10 @@ Last updated: ${new Date().toISOString()}
         blocked: blocked.length,
         iteration: state.execution.iteration,
         learnings: state.execution.learnings.length,
-      })
-    } catch (err) {
-      return JSON.stringify({
-        success: false,
-        error: `Failed to update progress: ${err}`,
-      })
-    }
+      }
+    })
+    
+    const result = await Effect.runPromise(effect)
+    return JSON.stringify(result)
   },
 })

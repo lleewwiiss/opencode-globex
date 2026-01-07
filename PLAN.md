@@ -228,55 +228,70 @@ while features.some(f => !f.passes):
 
 ---
 
-## OpenCode Plugin Structure
+## OpenCode Plugin Structure (Implemented)
 
 ```
 globex/
 ├── package.json
 ├── tsconfig.json
 ├── src/
-│   ├── index.ts                    # Plugin entry point
+│   ├── index.ts                    # Plugin entry: commands, agents, events, hooks
 │   ├── state/
-│   │   ├── machine.ts              # Phase state machine
-│   │   └── persistence.ts          # .globex/ file management
-│   ├── phases/
-│   │   ├── research.ts             # Research phase orchestration
-│   │   ├── plan.ts                 # Planning phase
-│   │   ├── features.ts             # Feature list generation
-│   │   └── execute.ts              # Ralph loop runner
-│   ├── interview/
-│   │   ├── engine.ts               # Question generation + convergence
-│   │   ├── citations.ts            # Evidence verification
-│   │   └── runner.ts               # Interview orchestration
-│   ├── tools/
-│   │   ├── save-artifact.ts        # Save phase artifacts
-│   │   ├── verify-citation.ts      # Check file:line still valid
-│   │   ├── check-convergence.ts    # Interview convergence check
-│   │   └── approve-phase.ts        # Human approval gate
-│   └── lib/
-│       └── effect-utils.ts         # Effect runtime utilities
-├── skills/                          # Skills with embedded principles
-│   ├── globex-init.md              # Initialize new PRD
-│   ├── globex-research.md          # Research phase (principles embedded)
-│   ├── globex-interview.md         # Validation interview (principles embedded)
-│   ├── globex-plan.md              # Planning phase (principles embedded)
-│   ├── globex-features.md          # Generate features
-│   └── globex-run.md               # Execute Ralph loop
-└── tests/
+│   │   ├── types.ts                # Phase, ExecutionState, Approval types
+│   │   └── persistence.ts          # .globex/ file management (Effect-based)
+│   └── tools/                      # 11 custom tools
+│       ├── globex-init.ts          # Initialize project
+│       ├── globex-status.ts        # Get current state
+│       ├── save-artifact.ts        # Save .md/.json files
+│       ├── approve-phase.ts        # Record approval, transition
+│       ├── verify-citation.ts      # Validate file:line references
+│       ├── check-convergence.ts    # Interview convergence tracking
+│       ├── update-feature.ts       # Mark feature complete/blocked
+│       ├── get-next-feature.ts     # Pick next eligible feature
+│       ├── update-progress.ts      # Generate progress.md
+│       ├── add-learning.ts         # Write to AGENTS.md
+│       └── set-phase.ts            # Manual phase override
+├── skills/                          # Reference skill files
+│   ├── globex-init.md
+│   ├── globex-research.md
+│   ├── globex-interview.md
+│   ├── globex-plan.md
+│   ├── globex-features.md
+│   ├── globex-run.md
+│   └── globex-status.md
+├── scripts/
+│   └── ralph-loop.sh               # External loop wrapper
+├── tests/                          # 35 tests
+│   ├── state.test.ts               # State persistence tests
+│   └── tools.test.ts               # Tool execution tests
+└── opencode.json
 ```
 
 **Note:** Engineering principles (data consistency, failure modes, testability, coupling, etc.) are embedded directly into the relevant skills - no separate framework files needed.
 
 ---
 
-## OpenCode Hooks Used
+## OpenCode Hooks Used (Implemented)
 
 | Hook | Purpose |
 |------|---------|
-| `config` | Register `/globex-*` commands |
-| `tool` | Custom tools (save_artifact, verify_citation, approve_phase) |
-| `event` | Track session.created, session.idle for notifications |
-| `experimental.chat.system.transform` | Inject current phase context (use cautiously) |
+| `config` | Register 8 `/globex-*` commands and 5 subagents |
+| `tool` | 11 custom tools for state management and workflow |
+| `event` | session.created (auto-detect project), session.error (log to progress.md), session.idle |
+| `tool.execute.after` | Toast notifications on phase approvals and feature completions |
+
+### Commands Registered via Config Hook
+
+| Command | Description | Subagent |
+|---------|-------------|----------|
+| `/globex-init` | Initialize workflow | - |
+| `/globex-status` | Check current phase | - |
+| `/globex-research` | Explore codebase | globex-research (read-only) |
+| `/globex-interview` | Validate artifacts | globex-interview (read-only) |
+| `/globex-plan` | Create implementation plan | globex-plan (read-only) |
+| `/globex-features` | Generate feature list | globex-features (read-only) |
+| `/globex-run` | Execute Ralph loop | globex-run (full write) |
+| `/globex-help` | Show workflow help | - |
 
 ---
 
@@ -314,37 +329,43 @@ These concepts are woven into the skills - the skills themselves don't cite book
 
 ---
 
-## CLI Commands
+## Usage
+
+Globex is an OpenCode plugin. Commands are invoked via `/slash-commands` inside OpenCode.
+
+### Interactive Phases (via OpenCode)
 
 ```bash
-# Initialize new PRD workflow
-globex init "feature description"
+# Start OpenCode in your project
+opencode
 
-# Run research phase
-globex research
-
-# Conduct validation interview for current phase
-globex interview
-
-# Run planning phase (requires approved research)
-globex plan
-
-# Generate features (requires approved plan)
-globex features
-
-# Execute Ralph loop in background
-globex run --background
-
-# Check progress
-globex status
-
-# View logs
-globex logs -f
-
-# Pause/resume execution
-globex pause
-globex resume
+# Inside OpenCode:
+> /globex-init           # Initialize new PRD workflow
+> /globex-research       # Agent explores codebase
+> /globex-interview      # Human validates current phase artifact
+> /globex-plan           # Create implementation plan
+> /globex-features       # Generate atomic feature list
+> /globex-status         # Check current phase and progress
 ```
+
+### Ralph Loop (External Runner)
+
+The execution phase runs outside OpenCode via a bash loop. Each iteration starts a fresh OpenCode context, implements ONE feature, commits, and exits.
+
+```bash
+# Run the Ralph loop (from project root)
+./scripts/ralph-loop.sh --max-iterations 50
+
+# Monitor progress in another terminal
+watch -n 5 'cat .globex/progress.md'
+```
+
+The loop continues until:
+- Agent outputs `<promise>ALL_FEATURES_COMPLETE</promise>`
+- Max iterations reached
+- User presses Ctrl+C
+
+**Why external?** OpenCode doesn't have stop hooks. External loop provides context isolation between iterations, preventing context window exhaustion and ensuring each iteration starts fresh.
 
 ---
 

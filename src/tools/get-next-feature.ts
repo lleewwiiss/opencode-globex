@@ -22,7 +22,13 @@ interface FeaturesFile {
 }
 
 export const createGetNextFeature = (workdir: string): ToolDefinition => tool({
-  description: "Get the next eligible feature to implement (passes=false, dependencies satisfied, highest priority)",
+  description: `Get the next eligible feature to implement (passes=false, dependencies satisfied, highest priority).
+
+Returns JSON with one of:
+- {feature: {...}, progress: {completed, remaining, total}} - next feature to implement
+- {done: true, totalFeatures} - all features complete, output <promise>ALL_FEATURES_COMPLETE</promise>
+- {blocked: true, blockedFeatures: [...]} - no eligible features due to unsatisfied dependencies
+- {error: string} - failed to read features.json`,
   args: {},
   async execute() {
     const featuresPath = path.join(getGlobexDir(workdir), "features.json")
