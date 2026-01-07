@@ -2,14 +2,10 @@ import { Schema } from "effect"
 
 export const PhaseSchema = Schema.Union(
   Schema.Literal("init"),
-  Schema.Literal("research"),
-  Schema.Literal("research_interview"),
   Schema.Literal("plan"),
-  Schema.Literal("plan_interview"),
+  Schema.Literal("interview"),
   Schema.Literal("features"),
-  Schema.Literal("features_interview"),
-  Schema.Literal("execute"),
-  Schema.Literal("complete")
+  Schema.Literal("execute")
 )
 export type Phase = Schema.Schema.Type<typeof PhaseSchema>
 
@@ -32,6 +28,7 @@ export type Approval = Schema.Schema.Type<typeof ApprovalSchema>
 export const InterviewHistorySchema = Schema.Struct({
   questionsAsked: Schema.Number,
   convergenceRound: Schema.Number,
+  noNewGapsStreak: Schema.optionalWith(Schema.Number, { default: () => 0 }),
   duration: Schema.String,
   startedAt: Schema.String,
 })
@@ -48,7 +45,6 @@ export const ExecutionStateSchema = Schema.Struct({
 export type ExecutionState = Schema.Schema.Type<typeof ExecutionStateSchema>
 
 export const ApprovablePhaseSchema = Schema.Union(
-  Schema.Literal("research"),
   Schema.Literal("plan"),
   Schema.Literal("features")
 )
@@ -141,6 +137,13 @@ export const FeatureVerificationSchema = Schema.Struct({
 })
 export type FeatureVerification = Schema.Schema.Type<typeof FeatureVerificationSchema>
 
+export const PatternRefSchema = Schema.Struct({
+  file: Schema.String,
+  lines: Schema.String,
+  pattern: Schema.String,
+})
+export type PatternRef = Schema.Schema.Type<typeof PatternRefSchema>
+
 export const FeatureSchema = Schema.Struct({
   id: Schema.String,
   description: Schema.String,
@@ -151,7 +154,8 @@ export const FeatureSchema = Schema.Struct({
   priority: Schema.Number,
   dependencies: Schema.Array(Schema.String),
   filesTouched: Schema.optional(Schema.Array(Schema.String)),
-  estimatedMinutes: Schema.optional(Schema.Number),
+  attempts: Schema.optional(Schema.Number),
+  patternsToFollow: Schema.optional(Schema.Array(PatternRefSchema)),
   completedAt: Schema.optional(Schema.String),
 })
 export type Feature = Schema.Schema.Type<typeof FeatureSchema>
@@ -162,7 +166,6 @@ export const FeaturesSummarySchema = Schema.Struct({
     key: Schema.String,
     value: Schema.Number,
   })),
-  estimatedTotalMinutes: Schema.optional(Schema.Number),
 })
 export type FeaturesSummary = Schema.Schema.Type<typeof FeaturesSummarySchema>
 

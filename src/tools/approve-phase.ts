@@ -4,25 +4,24 @@ import { recordApproval, updatePhase, readState } from "../state/persistence.js"
 import type { ApprovalStatus, Phase } from "../state/types.js"
 
 const NEXT_PHASE: Record<string, Phase> = {
-  research: "plan",
-  plan: "features",
+  plan: "interview",
   features: "execute"
 }
 
 export const createApprovePhase = (workdir: string): ToolDefinition => tool({
-  description: `Record human approval decision for a globex phase (research, plan, or features).
+  description: `Record human approval decision for a globex phase (plan or features).
 
-On approved/approved_with_risks: transitions to next phase (research→plan→features→execute).
+On approved/approved_with_risks: transitions to next phase (plan→interview→features→execute).
 On rejected: stays at current phase for rework.
 Returns: "Phase {phase} {status}. Current phase: {currentPhase}"`,
   args: {
-    phase: tool.schema.enum(["research", "plan", "features"]),
+    phase: tool.schema.enum(["plan", "features"]),
     status: tool.schema.enum(["approved", "approved_with_risks", "rejected"]),
     risks: tool.schema.array(tool.schema.string()).optional(),
     notes: tool.schema.string().optional(),
   },
   async execute(args) {
-    const phase = args.phase as "research" | "plan" | "features"
+    const phase = args.phase as "plan" | "features"
     const status = args.status as ApprovalStatus
     
     const approval = {

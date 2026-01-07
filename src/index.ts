@@ -1,4 +1,5 @@
 import type { Plugin } from "@opencode-ai/plugin"
+import { createOpencodeClient as createV2Client } from "@opencode-ai/sdk/v2"
 import { createSaveArtifact } from "./tools/save-artifact.js"
 import { createApprovePhase } from "./tools/approve-phase.js"
 import { createGlobexStatus } from "./tools/globex-status.js"
@@ -10,9 +11,14 @@ import { createGetNextFeature } from "./tools/get-next-feature.js"
 import { createUpdateProgress } from "./tools/update-progress.js"
 import { createAddLearning } from "./tools/add-learning.js"
 import { createSetPhase } from "./tools/set-phase.js"
-import { stateExists, loadState, getGlobexDir } from "./state/persistence.js"
+import { createSelectProject } from "./tools/select-project.js"
+import { stateExists, loadState, getGlobexBaseDir } from "./state/persistence.js"
+import type { Phase } from "./state/types.js"
 import * as fs from "node:fs/promises"
 import * as path from "node:path"
+
+// Track active interview sessions: interviewSessionId -> parentSessionId
+const interviewSessions = new Map<string, string>()
 
 const RESEARCH_PROMPT = `Conduct deep codebase research for PRD generation.
 
@@ -36,28 +42,33 @@ Create research.citations.json with file:line evidence for each claim.
 
 When complete, inform user to run /globex-interview to validate.`
 
-const INTERVIEW_PROMPT = `Validate phase artifacts through adversarial questioning.
+const INTERVIEW_PROMPT = `Validate phase artifacts through focused questioning with the human.
 
 ## Your Mission
-Challenge BOTH agent claims AND human assumptions. Require file:line evidence.
+You are interviewing the HUMAN to validate their understanding and identify gaps.
+Ask questions about design decisions, edge cases, and risks. Let the human answer.
 
 ## Process
 1. Use globex_status() to determine current phase
-2. Load the corresponding artifact (.globex/research.md, plan.md, or features.json)
-3. Generate SPECIFIC questions referencing actual findings
-4. For each claim without evidence: demand file:line citation
-5. Use globex_verify_citation() to validate references
-6. Track progress with globex_check_convergence()
-7. When converged, use globex_approve_phase() with: approved | approved_with_risks | rejected
+2. Read the corresponding artifact (.globex/research.md, plan.md, or features.json)
+3. Ask ONE question at a time, wait for human response
+4. Track progress with globex_check_convergence() after each exchange
+5. When converged, use globex_approve_phase() with: approved | approved_with_risks | rejected
 
-## Question Lenses
-- Data consistency: What happens on partial failure?
-- Coupling: What's the blast radius of a change?
-- Testability: How would you test this before implementing?
-- Failure modes: What's the fallback if X fails?
+## Question Types by Phase
+**Research**: "How does X component handle Y scenario?" / "What's the data flow for Z?"
+**Plan**: "How do you verify phase N before starting N+1?" / "What if step X fails?"
+**Features**: "Is feature X atomic enough for one iteration?" / "What are the dependencies?"
+
+## Rules
+- Ask the HUMAN, don't answer yourself
+- One question at a time
+- Accept verbal explanations - don't demand file:line citations
+- Use globex_verify_citation() only if YOU need to verify something
+- Converge when: human has addressed key risks, OR max questions reached
 
 ## Convergence
-Stop when: no new questions, OR max questions reached, OR user indicates ready.`
+Call globex_approve_phase() when satisfied. This returns you to the main session.`
 
 const PLAN_PROMPT = `Create detailed implementation plan from approved research.
 
@@ -144,8 +155,40 @@ Learnings persist in AGENTS.md for ALL future sessions. Use sparingly for critic
 - NEVER git push. Only commit.
 - Exit cleanly for fresh context on next iteration.`
 
+const PHASE_NEXT_ACTIONS: Partial<Record<Phase, string>> = {
+  init: "/globex-plan",
+  plan: "(planning...)",
+  interview: "/globex-interview",
+  features: "(generating features...)",
+  execute: "/globex-run",
+}
+
+const getNextAction = (phase: Phase): string | undefined => PHASE_NEXT_ACTIONS[phase]
+
 export const GlobexPlugin: Plugin = async (ctx) => {
   const workdir = ctx.directory
+
+  // Create v2 client for selectSession API
+  const v2Client = createV2Client({
+    baseUrl: ctx.serverUrl.toString().replace(/\/$/, ""),
+  })
+
+  // Helper to switch TUI to a session
+  const selectSession = async (sessionId: string) => {
+    try {
+      await v2Client.tui.selectSession({ sessionID: sessionId })
+      return true
+    } catch (err) {
+      await ctx.client.app.log({
+        body: {
+          service: "globex",
+          level: "error",
+          message: `Failed to select session ${sessionId}: ${err}`,
+        },
+      })
+      return false
+    }
+  }
 
   const showToast = async (
     message: string,
@@ -168,7 +211,7 @@ export const GlobexPlugin: Plugin = async (ctx) => {
 
   const logError = async (error: string) => {
     try {
-      const progressPath = path.join(getGlobexDir(workdir), "progress.md")
+      const progressPath = path.join(getGlobexBaseDir(workdir), "errors.log")
       const timestamp = new Date().toISOString()
       const entry = `\n## Error [${timestamp}]\n${error}\n`
       await fs.appendFile(progressPath, entry)
@@ -183,6 +226,7 @@ export const GlobexPlugin: Plugin = async (ctx) => {
     tool: {
       globex_init: createGlobexInit(workdir),
       globex_status: createGlobexStatus(workdir),
+      globex_select_project: createSelectProject(workdir),
       globex_save_artifact: createSaveArtifact(workdir),
       globex_approve_phase: createApprovePhase(workdir),
       globex_verify_citation: createVerifyCitation(workdir),
@@ -198,7 +242,11 @@ export const GlobexPlugin: Plugin = async (ctx) => {
       config.command = {
         ...config.command,
         "globex-init": {
-          template: "Initialize a Globex PRD workflow. Project: $ARGUMENTS",
+          template: `Initialize a Globex PRD workflow using globex_init().
+
+Extract projectName and description from: $ARGUMENTS
+
+After successful init, tell the user to run /globex-research to begin codebase exploration.`,
           description: "Start a new Globex workflow for PRD generation",
         },
         "globex-status": {
@@ -274,6 +322,7 @@ Use /globex-status anytime to check progress.`,
             write: false,
             edit: false,
             bash: false,
+            task: false, // Interview should not spawn subagents
           },
         },
         "globex-plan": {
@@ -305,20 +354,73 @@ Use /globex-status anytime to check progress.`,
             bash: "allow",
           },
         },
+        "globex-ralph": {
+          description:
+            "Autonomous feature implementer for Globex PRD workflow. Picks ONE feature, implements, verifies, commits.",
+          permission: {
+            edit: "allow",
+            bash: {
+              "*": "allow",
+              "git push*": "deny",
+              "rm -rf /*": "deny",
+            },
+          },
+        },
+        "globex-wiggum": {
+          description:
+            "Read-only validation agent for Globex PRD workflow. Reviews Ralph's implementation against acceptance criteria.",
+          tools: {
+            edit: false,
+            write: false,
+          },
+          permission: {
+            bash: {
+              "*": "allow",
+              "rm *": "deny",
+              "rm -rf *": "deny",
+              "git push*": "deny",
+              "git reset --hard*": "deny",
+            },
+          },
+        },
       }
     },
 
     event: async ({ event }) => {
       if (event.type === "session.created") {
+        const props = event.properties as {
+          id?: string
+          parentID?: string
+          agent?: string
+        } | undefined
+
+        // Detect interview child session and auto-switch to it
+        if (props?.id && props?.parentID && props?.agent === "globex-interview") {
+          interviewSessions.set(props.id, props.parentID)
+          await ctx.client.app.log({
+            body: {
+              service: "globex",
+              level: "info",
+              message: `Interview session created: ${props.id}, switching from parent: ${props.parentID}`,
+            },
+          })
+          await showToast("Switching to interview session...", "info", "Globex Interview")
+          // Small delay to ensure session is ready
+          await new Promise((r) => setTimeout(r, 100))
+          await selectSession(props.id)
+          return
+        }
+
+        // Normal session created - show globex status with next action
         const exists = await stateExists(workdir)
         if (exists) {
           try {
             const state = await loadState(workdir)
-            await showToast(
-              `Resuming: ${state.projectName} (${state.currentPhase})`,
-              "info",
-              "Globex Project Found"
-            )
+            const nextAction = getNextAction(state.currentPhase)
+            const message = nextAction
+              ? `${state.projectName} (${state.currentPhase}) → ${nextAction}`
+              : `${state.projectName} (${state.currentPhase})`
+            await showToast(message, "info", "Globex")
             await ctx.client.app.log({
               body: {
                 service: "globex",
@@ -344,7 +446,7 @@ Use /globex-status anytime to check progress.`,
             ? JSON.stringify(event.properties)
             : "Unknown session error"
         await logError(errorMessage)
-        await showToast("Session error logged to progress.md", "error", "Globex Error")
+        await showToast("Session error logged to errors.log", "error", "Globex Error")
       }
 
       if (event.type === "session.idle") {
@@ -359,29 +461,68 @@ Use /globex-status anytime to check progress.`,
     },
 
     "tool.execute.after": async (input, output) => {
+      if (input.tool === "globex_save_artifact") {
+        try {
+          const result = JSON.parse(output.output)
+          if (result.success && result.transitioned && result.nextAction) {
+            await showToast(
+              `Auto-transitioned. Run ${result.nextAction} to validate.`,
+              "info",
+              "Phase Transition"
+            )
+            await ctx.client.app.log({
+              body: {
+                service: "globex",
+                level: "info",
+                message: `Artifact ${result.artifact} saved, auto-transitioned. Next: ${result.nextAction}`,
+              },
+            })
+          }
+        } catch {
+          // Non-JSON output, ignore
+        }
+      }
+
       if (input.tool === "globex_approve_phase") {
         const result = output.output
-        if (result.includes("approved")) {
-          const match = result.match(/Phase (\w+) (approved|approved_with_risks|rejected)/)
-          if (match) {
-            const [, phase, status] = match
-            const nextPhase =
-              phase === "research"
-                ? "plan"
-                : phase === "plan"
-                  ? "features"
-                  : phase === "features"
-                    ? "execute"
-                    : null
-            if (status === "approved" || status === "approved_with_risks") {
-              await showToast(
-                `${phase} approved → ready for ${nextPhase || "next step"}`,
-                "success",
-                "Phase Approved"
-              )
-            } else if (status === "rejected") {
-              await showToast(`${phase} rejected → redo required`, "warning", "Phase Rejected")
-            }
+        const match = result.match(/Phase (\w+) (approved|approved_with_risks|rejected)/)
+        if (match) {
+          const [, phase, status] = match
+          const nextPhase =
+            phase === "research"
+              ? "plan"
+              : phase === "plan"
+                ? "features"
+                : phase === "features"
+                  ? "execute"
+                  : null
+
+          if (status === "approved" || status === "approved_with_risks") {
+            await showToast(
+              `${phase} approved → ready for ${nextPhase || "next step"}`,
+              "success",
+              "Phase Approved"
+            )
+          } else if (status === "rejected") {
+            await showToast(`${phase} rejected → redo required`, "warning", "Phase Rejected")
+          }
+
+          // If this was called from an interview session, switch back to parent
+          const parentId = interviewSessions.get(input.sessionID)
+          if (parentId) {
+            await ctx.client.app.log({
+              body: {
+                service: "globex",
+                level: "info",
+                message: `Interview complete (${status}), returning to parent session: ${parentId}`,
+              },
+            })
+            await showToast("Returning to main session...", "info", "Interview Complete")
+            // Small delay before switching
+            await new Promise((r) => setTimeout(r, 500))
+            await selectSession(parentId)
+            // Clean up tracking
+            interviewSessions.delete(input.sessionID)
           }
         }
       }
