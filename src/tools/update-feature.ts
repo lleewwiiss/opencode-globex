@@ -1,7 +1,10 @@
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
+import { Effect } from "effect"
 import * as fs from "node:fs/promises"
 import * as path from "node:path"
-import { getGlobexDir } from "../state/persistence.js"
+import { getProjectDir, getActiveProject } from "../state/persistence.js"
+
+const MAX_ATTEMPTS = 5
 
 interface Feature {
   id: string
@@ -9,12 +12,32 @@ interface Feature {
   passes: boolean
   priority: number
   dependencies: string[]
+  blocked?: boolean
+  blockedReason?: string
+  attempts?: number
   [key: string]: unknown
 }
 
 interface FeaturesFile {
   features: Feature[]
   [key: string]: unknown
+}
+
+const cascadeBlock = (
+  features: Feature[],
+  blockedId: string,
+  visited: Set<string> = new Set()
+): void => {
+  if (visited.has(blockedId)) return
+  visited.add(blockedId)
+
+  for (const feature of features) {
+    if (feature.dependencies?.includes(blockedId) && !feature.blocked) {
+      feature.blocked = true
+      feature.blockedReason = `Dependency ${blockedId} is blocked`
+      cascadeBlock(features, feature.id, visited)
+    }
+  }
 }
 
 export const createUpdateFeature = (workdir: string): ToolDefinition => tool({
@@ -32,7 +55,8 @@ Returns: { success, featureId, passes, blocked, progress, remaining }`,
     notes: tool.schema.string().optional(),
   },
   async execute(args) {
-    const featuresPath = path.join(getGlobexDir(workdir), "features.json")
+    const projectId = await Effect.runPromise(getActiveProject(workdir))
+    const featuresPath = path.join(getProjectDir(workdir, projectId), "features.json")
 
     if (args.passes === undefined && args.blocked === undefined) {
       return JSON.stringify({
@@ -59,6 +83,14 @@ Returns: { success, featureId, passes, blocked, progress, remaining }`,
         feature.passes = args.passes
         if (args.passes) {
           feature.completedAt = new Date().toISOString()
+          feature.attempts = (feature.attempts ?? 0) + 1
+        } else {
+          feature.attempts = (feature.attempts ?? 0) + 1
+          if (feature.attempts >= MAX_ATTEMPTS) {
+            feature.blocked = true
+            feature.blockedReason = `Auto-blocked: exceeded ${MAX_ATTEMPTS} attempts`
+            cascadeBlock(data.features, feature.id)
+          }
         }
       }
       
@@ -66,6 +98,9 @@ Returns: { success, featureId, passes, blocked, progress, remaining }`,
         feature.blocked = args.blocked
         if (args.blockedReason) {
           feature.blockedReason = args.blockedReason
+        }
+        if (args.blocked) {
+          cascadeBlock(data.features, feature.id)
         }
       }
       
@@ -83,6 +118,7 @@ Returns: { success, featureId, passes, blocked, progress, remaining }`,
         featureId: args.featureId,
         passes: feature.passes,
         blocked: feature.blocked,
+        attempts: feature.attempts ?? 0,
         progress: `${total - remaining}/${total} complete`,
         remaining,
       })
