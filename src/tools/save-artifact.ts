@@ -14,7 +14,8 @@ const SCHEMA_MAP: Record<string, Schema.Schema.Any> = {
 }
 
 const AUTO_TRANSITION_MAP: Record<string, { fromPhase: Phase; toPhase: Phase; nextAction: string }> = {
-  "plan.md": { fromPhase: "plan", toPhase: "interview", nextAction: "/globex-interview" },
+  "research.md": { fromPhase: "research", toPhase: "research_interview", nextAction: "/globex-interview" },
+  "plan.md": { fromPhase: "plan", toPhase: "plan_interview", nextAction: "/globex-interview" },
   "features.json": { fromPhase: "features", toPhase: "execute", nextAction: "/globex-run" },
 }
 

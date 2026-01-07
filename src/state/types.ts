@@ -1,9 +1,12 @@
 export type Phase = 
   | "init"
+  | "research"
+  | "research_interview"
   | "plan"
-  | "interview"
+  | "plan_interview"
   | "features"
   | "execute"
+  | "complete"
 
 export interface PatternRef {
   file: string
@@ -11,7 +14,7 @@ export interface PatternRef {
   pattern: string
 }
 
-export type ApprovalStatus = "pending" | "approved" | "approved_with_risks" | "rejected"
+export type ApprovalStatus = "pending" | "approved" | "rejected"
 
 export interface Approval {
   status: ApprovalStatus
@@ -43,24 +46,30 @@ export interface GlobexState {
   description: string
   createdAt: string
   updatedAt: string
-  approvals: Partial<Record<"plan" | "features", Approval>>
+  approvals: Partial<Record<"research" | "plan" | "features", Approval>>
   artifacts: Partial<Record<string, string>>
-  interviewHistory: Partial<Record<"plan" | "features", InterviewHistory>>
+  interviewHistory: Partial<Record<"research" | "plan" | "features", InterviewHistory>>
   execution?: ExecutionState
 }
 
 export const PHASE_ORDER: Phase[] = [
   "init",
+  "research",
+  "research_interview",
   "plan",
-  "interview",
+  "plan_interview",
   "features",
-  "execute"
+  "execute",
+  "complete"
 ]
 
 export const PHASE_TRANSITIONS: Record<Phase, Phase[]> = {
-  init: ["plan"],
-  plan: ["interview"],
-  interview: ["features", "plan"],
+  init: ["research"],
+  research: ["research_interview"],
+  research_interview: ["plan", "research"],
+  plan: ["plan_interview"],
+  plan_interview: ["features", "plan"],
   features: ["execute"],
-  execute: []
+  execute: ["complete"],
+  complete: []
 }

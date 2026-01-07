@@ -326,7 +326,7 @@ describe("tools", () => {
   describe("approve_phase", () => {
     test("records approval and transitions phase", async () => {
       const state = createInitialState("test", "desc")
-      state.currentPhase = "plan"
+      state.currentPhase = "plan_interview"
       await Effect.runPromise(writeState(testDir, state))
       
       const { createApprovePhase } = await import("../src/tools/approve-phase")
@@ -338,12 +338,12 @@ describe("tools", () => {
       )
       
       expect(result).toContain("approved")
-      expect(result).toContain("interview")
+      expect(result).toContain("features")
     })
 
     test("records rejection and stays in phase", async () => {
       const state = createInitialState("test", "desc")
-      state.currentPhase = "plan"
+      state.currentPhase = "plan_interview"
       await Effect.runPromise(writeState(testDir, state))
       
       const { createApprovePhase } = await import("../src/tools/approve-phase")

@@ -7,24 +7,24 @@ const MIN_QUESTIONS = 10
 const CONVERGENCE_ROUNDS_TO_STOP = 2
 
 const TIMEBOXES: Record<string, number> = {
+  research: 20,
   plan: 30,
-  features: 15,
 }
 
 export const createCheckConvergence = (workdir: string): ToolDefinition => tool({
   description: `Check interview convergence status and decide whether to continue or stop.
 
-Limits by phase: plan (30 questions, 30 min), features (20 questions, 15 min).
-Stops when: max questions reached, timebox exceeded, or no new gaps found for 2 rounds.
+Limits by phase: research (20 min), plan (30 min).
+Stops when: timebox exceeded, or no new gaps found for 2 rounds after min 10 questions.
 
-Returns JSON: {shouldStop, reason, questionsAsked, maxQuestions, elapsedMinutes, timeboxMinutes, convergenceRound}`,
+Returns JSON: {shouldStop, reason, questionsAsked, minQuestions, elapsedMinutes, timeboxMinutes, convergenceRound}`,
   args: {
-    phase: tool.schema.enum(["plan", "features"]),
+    phase: tool.schema.enum(["research", "plan"]),
     questionsThisRound: tool.schema.number(),
     newGapsFound: tool.schema.boolean(),
   },
   async execute(args) {
-    const phase = args.phase as "plan" | "features"
+    const phase = args.phase as "research" | "plan"
     const timeboxMinutes = TIMEBOXES[phase]
     
     const effect = Effect.gen(function* () {

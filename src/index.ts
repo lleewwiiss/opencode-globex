@@ -232,9 +232,11 @@ Learnings persist in AGENTS.md for ALL future sessions. Use sparingly for critic
 - Exit cleanly for fresh context on next iteration.`
 
 const PHASE_NEXT_ACTIONS: Partial<Record<Phase, string>> = {
-  init: "/globex-plan",
+  init: "/globex-research",
+  research: "(researching...)",
+  research_interview: "/globex-interview",
   plan: "(planning...)",
-  interview: "/globex-interview",
+  plan_interview: "/globex-interview",
   features: "(generating features...)",
   execute: "/globex-run",
 }

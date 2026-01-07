@@ -4,7 +4,7 @@ import { readState, writeState } from "../state/persistence.js"
 import { PHASE_TRANSITIONS, type Phase } from "../state/types.js"
 
 const VALID_PHASES: Phase[] = [
-  "init", "plan", "interview", "features", "execute"
+  "init", "research", "research_interview", "plan", "plan_interview", "features", "execute", "complete"
 ]
 
 export const createSetPhase = (workdir: string): ToolDefinition => tool({
