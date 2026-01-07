@@ -174,3 +174,27 @@ export const FeaturesSchema = Schema.Struct({
   summary: Schema.optional(FeaturesSummarySchema),
 })
 export type Features = Schema.Schema.Type<typeof FeaturesSchema>
+
+export const LoopStatusSchema = Schema.Union(
+  Schema.Literal("idle"),
+  Schema.Literal("running"),
+  Schema.Literal("paused"),
+  Schema.Literal("complete")
+)
+export type LoopStatus = Schema.Schema.Type<typeof LoopStatusSchema>
+
+export const LoopStateSchema = Schema.Struct({
+  status: LoopStatusSchema,
+  currentFeatureId: Schema.NullOr(Schema.String),
+  lastCommitHash: Schema.NullOr(Schema.String),
+  iteration: Schema.Number,
+  totalIterations: Schema.NullOr(Schema.Number),
+  startedAt: Schema.NullOr(Schema.String),
+  pausedAt: Schema.NullOr(Schema.String),
+  ralphSessionId: Schema.NullOr(Schema.String),
+  wiggumSessionId: Schema.NullOr(Schema.String),
+  lastSignal: Schema.NullOr(Schema.String),
+  completedFeatures: Schema.Array(Schema.String),
+  blockedFeatures: Schema.Array(Schema.String),
+})
+export type LoopState = Schema.Schema.Type<typeof LoopStateSchema>
