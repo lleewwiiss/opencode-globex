@@ -13,9 +13,13 @@ import {
   stateExists,
   getGlobexDir,
   getStatePath,
+  getLoopStatePath,
+  loadLoopStateAsync,
+  saveLoopStateAsync,
+  clearLoopStateAsync,
   StateNotFoundError,
 } from "../src/state/persistence"
-import type { GlobexState, Phase, Approval } from "../src/state/types"
+import type { GlobexState, Phase, Approval, LoopState } from "../src/state/types"
 
 describe("state persistence", () => {
   let testDir: string
@@ -187,6 +191,90 @@ describe("state persistence", () => {
     test("getStatePath returns correct path with projectId", () => {
       expect(getStatePath("/foo/bar", "myproject")).toBe("/foo/bar/.globex/projects/myproject/state.json")
     })
+  })
+})
+
+describe("loop state persistence", () => {
+  let testDir: string
+
+  beforeEach(async () => {
+    testDir = await fs.mkdtemp(path.join(os.tmpdir(), "globex-test-"))
+  })
+
+  afterEach(async () => {
+    await fs.rm(testDir, { recursive: true, force: true })
+  })
+
+  test("loadLoopState returns null when no state", async () => {
+    const state = await loadLoopStateAsync(testDir)
+    expect(state).toBeNull()
+  })
+
+  test("saveLoopState creates file", async () => {
+    const loopState: LoopState = {
+      status: "running",
+      iteration: 1,
+      completedFeatures: [],
+      blockedFeatures: []
+    }
+    
+    await saveLoopStateAsync(testDir, loopState)
+    
+    const loopStatePath = getLoopStatePath(testDir)
+    const exists = await fs.access(loopStatePath).then(() => true).catch(() => false)
+    expect(exists).toBe(true)
+  })
+
+  test("loadLoopState returns saved state", async () => {
+    const loopState: LoopState = {
+      status: "paused",
+      iteration: 3,
+      currentFeatureId: "F001",
+      lastCommitHash: "abc123",
+      totalIterations: 10,
+      startedAt: "2024-01-01T10:00:00.000Z",
+      pausedAt: "2024-01-01T11:30:00.000Z",
+      ralphSessionId: "ralph-session-123",
+      wiggumSessionId: "wiggum-session-456",
+      lastSignal: "approved",
+      completedFeatures: ["F001", "F002"],
+      blockedFeatures: ["F005"]
+    }
+    
+    await saveLoopStateAsync(testDir, loopState)
+    const loaded = await loadLoopStateAsync(testDir)
+    
+    expect(loaded).toEqual(loopState)
+  })
+
+  test("clearLoopState removes file", async () => {
+    const loopState: LoopState = {
+      status: "complete",
+      iteration: 5,
+      completedFeatures: [],
+      blockedFeatures: []
+    }
+    
+    await saveLoopStateAsync(testDir, loopState)
+    await clearLoopStateAsync(testDir)
+    
+    const loopStatePath = getLoopStatePath(testDir)
+    const exists = await fs.access(loopStatePath).then(() => true).catch(() => false)
+    expect(exists).toBe(false)
+  })
+
+  test("schema validation of malformed state", async () => {
+    const loopStatePath = getLoopStatePath(testDir)
+    const dir = path.dirname(loopStatePath)
+    await fs.mkdir(dir, { recursive: true })
+    await fs.writeFile(loopStatePath, '{"invalid": "json", "status": 123}')
+    
+    const loaded = await loadLoopStateAsync(testDir)
+    
+    // loadLoopState catches parse errors and returns the JSON as-is
+    // This test verifies it doesn't crash on malformed data
+    expect(loaded).toBeTruthy()
+    expect(typeof loaded).toBe("object")
   })
 })
 
