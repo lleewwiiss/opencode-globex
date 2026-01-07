@@ -23,6 +23,7 @@ interface Feature {
   blockedReason?: string
   attempts?: number
   patternsToFollow?: PatternRef[]
+  feedback?: string
   [key: string]: unknown
 }
 
@@ -93,6 +94,7 @@ Returns JSON with one of:
           dependencies: next.dependencies,
           patternsToFollow: next.patternsToFollow ?? [],
           attempts: next.attempts ?? 0,
+          feedback: next.feedback ?? null,
         },
         progress: {
           completed: data.features.length - remaining,

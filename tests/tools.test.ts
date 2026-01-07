@@ -266,7 +266,7 @@ describe("tools", () => {
       const tool = createCheckConvergence(testDir)
       
       const result = await tool.execute(
-        { phase: "research", questionsThisRound: 5, newGapsFound: true },
+        { phase: "plan", questionsThisRound: 5, newGapsFound: true },
         mockContext()
       )
       
@@ -276,40 +276,21 @@ describe("tools", () => {
       expect(parsed.convergenceRound).toBe(1)
     })
 
-    test("signals stop when max questions reached", async () => {
+    test("signals stop when converged after min questions", async () => {
       const state = createInitialState("test", "desc")
       await Effect.runPromise(writeState(testDir, state))
       
       const { createCheckConvergence } = await import("../src/tools/check-convergence")
       const tool = createCheckConvergence(testDir)
       
+      // First round: 10 questions, no new gaps (meets MIN_QUESTIONS=10)
       await tool.execute(
-        { phase: "research", questionsThisRound: 20, newGapsFound: true },
+        { phase: "plan", questionsThisRound: 10, newGapsFound: false },
         mockContext()
       )
+      // Second round: no new gaps again (streak=2, triggers convergence)
       const result = await tool.execute(
-        { phase: "research", questionsThisRound: 10, newGapsFound: true },
-        mockContext()
-      )
-      
-      const parsed = JSON.parse(result)
-      expect(parsed.shouldStop).toBe(true)
-      expect(parsed.reason).toBe("max_questions_reached")
-    })
-
-    test("signals stop when no new gaps found", async () => {
-      const state = createInitialState("test", "desc")
-      await Effect.runPromise(writeState(testDir, state))
-      
-      const { createCheckConvergence } = await import("../src/tools/check-convergence")
-      const tool = createCheckConvergence(testDir)
-      
-      await tool.execute(
-        { phase: "research", questionsThisRound: 3, newGapsFound: false },
-        mockContext()
-      )
-      const result = await tool.execute(
-        { phase: "research", questionsThisRound: 2, newGapsFound: false },
+        { phase: "plan", questionsThisRound: 2, newGapsFound: false },
         mockContext()
       )
       
@@ -317,41 +298,64 @@ describe("tools", () => {
       expect(parsed.shouldStop).toBe(true)
       expect(parsed.reason).toBe("converged_no_new_gaps")
     })
+
+    test("continues when under min questions even with no gaps", async () => {
+      const state = createInitialState("test", "desc")
+      await Effect.runPromise(writeState(testDir, state))
+      
+      const { createCheckConvergence } = await import("../src/tools/check-convergence")
+      const tool = createCheckConvergence(testDir)
+      
+      // Only 5 questions - under MIN_QUESTIONS=10
+      await tool.execute(
+        { phase: "plan", questionsThisRound: 3, newGapsFound: false },
+        mockContext()
+      )
+      const result = await tool.execute(
+        { phase: "plan", questionsThisRound: 2, newGapsFound: false },
+        mockContext()
+      )
+      
+      const parsed = JSON.parse(result)
+      // Should continue because only 5 questions asked (under MIN_QUESTIONS=10)
+      expect(parsed.shouldStop).toBe(false)
+      expect(parsed.questionsAsked).toBe(5)
+    })
   })
 
   describe("approve_phase", () => {
     test("records approval and transitions phase", async () => {
       const state = createInitialState("test", "desc")
-      state.currentPhase = "research_interview"
+      state.currentPhase = "plan"
       await Effect.runPromise(writeState(testDir, state))
       
       const { createApprovePhase } = await import("../src/tools/approve-phase")
       const tool = createApprovePhase(testDir)
       
       const result = await tool.execute(
-        { phase: "research", status: "approved" },
+        { phase: "plan", status: "approved" },
         mockContext()
       )
       
       expect(result).toContain("approved")
-      expect(result).toContain("plan")
+      expect(result).toContain("interview")
     })
 
     test("records rejection and stays in phase", async () => {
       const state = createInitialState("test", "desc")
-      state.currentPhase = "research_interview"
+      state.currentPhase = "plan"
       await Effect.runPromise(writeState(testDir, state))
       
       const { createApprovePhase } = await import("../src/tools/approve-phase")
       const tool = createApprovePhase(testDir)
       
       const result = await tool.execute(
-        { phase: "research", status: "rejected", notes: "Need more detail" },
+        { phase: "plan", status: "rejected", notes: "Need more detail" },
         mockContext()
       )
       
       expect(result).toContain("rejected")
-      expect(result).toContain("research")
+      expect(result).toContain("plan")
     })
   })
 

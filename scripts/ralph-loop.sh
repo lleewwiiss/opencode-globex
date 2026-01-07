@@ -1,184 +1,255 @@
 #!/bin/bash
 set -euo pipefail
 
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+DIM='\033[2m'
+RESET='\033[0m'
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 GLOBEX_DIR="$PROJECT_DIR/.globex"
 LOG_FILE="$GLOBEX_DIR/ralph-loop.log"
 MAX_ITERATIONS=100
+MODEL="anthropic/claude-sonnet-4-20250514"
+COMPLETION_PROMISE="ALL_FEATURES_COMPLETE"
 
 # Read active project
 if [[ ! -f "$GLOBEX_DIR/active-project" ]]; then
-  echo "ERROR: No active project. Run /globex-init first." >&2
+  echo -e "${RED}ERROR: No active project. Run /globex-init first.${RESET}" >&2
   exit 1
 fi
 ACTIVE_PROJECT=$(cat "$GLOBEX_DIR/active-project")
 PROJECT_STATE_DIR="$GLOBEX_DIR/projects/$ACTIVE_PROJECT"
-COMPLETION_PROMISE="ALL_FEATURES_COMPLETE"
-MODEL="anthropic/claude-opus-4-5"
-RALPH_OUTPUT="/tmp/globex-ralph-output-$$.txt"
-WIGGUM_OUTPUT="/tmp/globex-wiggum-output-$$.txt"
+FEATURES_FILE="$PROJECT_STATE_DIR/features.json"
+
+RALPH_OUTPUT="/tmp/globex-ralph-$$.txt"
+WIGGUM_OUTPUT="/tmp/globex-wiggum-$$.txt"
 
 usage() {
   cat << 'EOF'
-Ralph Loop for Globex - Coach/Player Execution
+Ralph Loop - Coach/Player Execution
 
 USAGE:
   ./scripts/ralph-loop.sh [OPTIONS]
 
 OPTIONS:
-  --max-iterations <n>    Maximum iterations before auto-stop (default: 100)
-  --model <model>         OpenCode model to use (default: opencode/claude-opus-4-5)
-  -h, --help              Show this help message
+  --max-iterations <n>    Max iterations (default: 100)
+  --model <model>         Model to use (default: anthropic/claude-sonnet-4-20250514)
+  -h, --help              Show help
 
-DESCRIPTION:
-  Two-agent loop (coach/player pattern):
-  1. Ralph (player): Implements ONE feature, outputs <ralph>DONE:FEATURE_ID</ralph>
-  2. Wiggum (coach): Validates implementation against acceptance criteria
-     - Outputs <wiggum>APPROVED</wiggum> if all criteria pass
-     - Outputs <wiggum>REJECTED:reason</wiggum> with specific feedback
-  
-  On rejection, Ralph retries with feedback in next iteration.
-  Loop continues until ALL_FEATURES_COMPLETE.
-
-COMPLETION:
-  Loop stops when Ralph outputs: <promise>ALL_FEATURES_COMPLETE</promise>
+FLOW:
+  1. Ralph implements feature (no commit)
+  2. Wiggum validates implementation
+  3. If APPROVED → commit + mark passes
+  4. If REJECTED → Ralph retries with feedback
 
 MONITORING:
   tail -f .globex/ralph-loop.log
-
-STOPPING:
-  Ctrl+C to stop. Codebase will be in clean state (last commit).
 EOF
 }
 
 log() {
-  local timestamp
-  timestamp="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-  echo "[$timestamp] $*" | tee -a "$LOG_FILE"
+  echo "$(date -u '+%H:%M:%S') $*" >> "$LOG_FILE"
+}
+
+print_header() {
+  echo -e "\n${BOLD}${BLUE}═══════════════════════════════════════════════════${RESET}"
+  echo -e "${BOLD}  $1${RESET}"
+  echo -e "${BOLD}${BLUE}═══════════════════════════════════════════════════${RESET}"
+}
+
+print_status() {
+  local icon=$1 color=$2 msg=$3
+  echo -e "${color}${icon}${RESET} ${msg}"
 }
 
 while [[ $# -gt 0 ]]; do
   case $1 in
-    -h|--help)
-      usage
-      exit 0
-      ;;
+    -h|--help) usage; exit 0 ;;
     --max-iterations)
-      if [[ -z "${2:-}" ]] || ! [[ "$2" =~ ^[0-9]+$ ]]; then
-        echo "Error: --max-iterations requires a positive integer" >&2
-        exit 1
-      fi
-      MAX_ITERATIONS="$2"
-      shift 2
-      ;;
+      [[ -z "${2:-}" ]] && { echo "Error: --max-iterations requires integer" >&2; exit 1; }
+      MAX_ITERATIONS="$2"; shift 2 ;;
     --model)
-      if [[ -z "${2:-}" ]]; then
-        echo "Error: --model requires a model name" >&2
-        exit 1
-      fi
-      MODEL="$2"
-      shift 2
-      ;;
-    *)
-      echo "Unknown option: $1" >&2
-      usage
-      exit 1
-      ;;
+      [[ -z "${2:-}" ]] && { echo "Error: --model requires name" >&2; exit 1; }
+      MODEL="$2"; shift 2 ;;
+    *) echo "Unknown: $1" >&2; usage; exit 1 ;;
   esac
 done
 
-mkdir -p "$GLOBEX_DIR"
-
+# Validation
 if ! command -v opencode &> /dev/null; then
-  log "ERROR: opencode CLI not found. Install from https://opencode.ai"
+  echo -e "${RED}ERROR: opencode CLI not found${RESET}" >&2
   exit 1
 fi
 
 if [[ ! -f "$PROJECT_STATE_DIR/state.json" ]]; then
-  log "ERROR: Project state not found at $PROJECT_STATE_DIR/state.json"
-  log "Run /globex-init first."
+  echo -e "${RED}ERROR: No project state. Run /globex-init first.${RESET}" >&2
   exit 1
 fi
 
 CURRENT_PHASE=$(jq -r '.currentPhase' "$PROJECT_STATE_DIR/state.json")
 if [[ "$CURRENT_PHASE" != "execute" ]]; then
-  log "ERROR: Current phase is '$CURRENT_PHASE', expected 'execute'."
+  echo -e "${RED}ERROR: Phase is '$CURRENT_PHASE', need 'execute'${RESET}" >&2
   exit 1
 fi
 
-log "════════════════════════════════════════════════════════════"
-log "  Ralph Loop Started (Coach/Player Pattern)"
-log "  Project: $ACTIVE_PROJECT"
-log "  Max iterations: $MAX_ITERATIONS"
-log "  Model: $MODEL"
-log "════════════════════════════════════════════════════════════"
+# Check completion
+if [[ -f "$FEATURES_FILE" ]]; then
+  INCOMPLETE=$(jq '[.features[] | select(.passes != true and .blocked != true)] | length' "$FEATURES_FILE")
+  TOTAL=$(jq '.features | length' "$FEATURES_FILE")
+  COMPLETE=$((TOTAL - INCOMPLETE))
+  if [[ "$INCOMPLETE" == "0" ]]; then
+    print_header "All $TOTAL features complete!"
+    exit 0
+  fi
+fi
 
-ITERATION=1
+print_header "Ralph Loop: $ACTIVE_PROJECT"
+echo -e "${DIM}Model: $MODEL | Max: $MAX_ITERATIONS iterations${RESET}"
+echo -e "${DIM}Progress: $COMPLETE/$TOTAL features${RESET}\n"
+
+log "Started: $ACTIVE_PROJECT, model=$MODEL"
 
 cleanup() {
   rm -f "$RALPH_OUTPUT" "$WIGGUM_OUTPUT"
-  log "Loop stopped at iteration $ITERATION"
 }
 trap cleanup EXIT
 
+ITERATION=1
+
 while [[ $ITERATION -le $MAX_ITERATIONS ]]; do
-  log "────────────────────────────────────────────────────────────"
-  log "Iteration $ITERATION / $MAX_ITERATIONS"
-  log "────────────────────────────────────────────────────────────"
+  # Progress bar
+  INCOMPLETE=$(jq '[.features[] | select(.passes != true and .blocked != true)] | length' "$FEATURES_FILE" 2>/dev/null || echo "?")
+  TOTAL=$(jq '.features | length' "$FEATURES_FILE" 2>/dev/null || echo "?")
   
-  # --- RALPH (PLAYER) PHASE ---
-  log "RALPH: Starting implementation..."
-  opencode run --agent globex-ralph -m "$MODEL" "Execute ONE autonomous Ralph loop iteration." 2>&1 | tee "$RALPH_OUTPUT" || true
+  echo -e "\n${CYAN}────── Iteration $ITERATION ──────${RESET} ${DIM}($((TOTAL - INCOMPLETE))/$TOTAL done)${RESET}"
   
-  # Check for completion
+  # --- RALPH ---
+  print_status "🔨" "$YELLOW" "Ralph implementing..."
+  log "Ralph starting iteration $ITERATION"
+  
+  # Capture output, suppress live output
+  if ! opencode run --agent globex-ralph -m "$MODEL" \
+    "Implement ONE feature. Output <ralph>DONE:FEATURE_ID</ralph> when ready for validation. Do NOT commit. Do NOT call globex_update_feature with passes:true." \
+    > "$RALPH_OUTPUT" 2>&1; then
+    print_status "⚠" "$YELLOW" "Ralph exited with error, checking output..."
+  fi
+  
+  # Check completion
   if grep -q "<promise>$COMPLETION_PROMISE</promise>" "$RALPH_OUTPUT"; then
-    log "════════════════════════════════════════════════════════════"
-    log "COMPLETE: All features implemented!"
-    log "Total iterations: $ITERATION"
-    log "════════════════════════════════════════════════════════════"
+    print_header "✅ ALL FEATURES COMPLETE"
+    echo -e "${GREEN}Total iterations: $ITERATION${RESET}"
+    log "Complete at iteration $ITERATION"
     exit 0
   fi
   
-  # Parse Ralph output for feature ID
+  # Parse DONE tag
   FEATURE_ID=""
   if grep -qoE '<ralph>DONE:[^<]+</ralph>' "$RALPH_OUTPUT"; then
-    FEATURE_ID=$(grep -oE '<ralph>DONE:[^<]+</ralph>' "$RALPH_OUTPUT" | sed 's/<ralph>DONE://;s/<\/ralph>//')
+    FEATURE_ID=$(grep -oE '<ralph>DONE:[^<]+</ralph>' "$RALPH_OUTPUT" | head -1 | sed 's/<ralph>DONE://;s/<\/ralph>//')
   fi
   
   if [[ -z "$FEATURE_ID" ]]; then
-    log "RALPH: No DONE tag found. Retrying next iteration."
+    print_status "⚠" "$YELLOW" "No DONE tag, retrying..."
+    log "No DONE tag found"
+    # Show last 10 lines of output for debugging
+    echo -e "${DIM}Last output:${RESET}"
+    tail -5 "$RALPH_OUTPUT" | sed 's/^/  /'
     ITERATION=$((ITERATION + 1))
-    sleep 3
+    sleep 2
     continue
   fi
   
-  log "RALPH: Completed $FEATURE_ID"
+  print_status "✓" "$GREEN" "Ralph done: ${BOLD}$FEATURE_ID${RESET}"
+  log "Ralph completed $FEATURE_ID"
   
-  # --- WIGGUM (COACH) PHASE ---
-  log "WIGGUM: Starting validation of $FEATURE_ID..."
-  WIGGUM_PROMPT="Validate feature $FEATURE_ID implementation. Check acceptance criteria in .globex/projects/$ACTIVE_PROJECT/features.json. Output <wiggum>APPROVED</wiggum> if all criteria pass, or <wiggum>REJECTED:reason</wiggum> with specific feedback."
-  opencode run --agent globex-wiggum -m "$MODEL" "$WIGGUM_PROMPT" 2>&1 | tee "$WIGGUM_OUTPUT" || true
+  # --- WIGGUM ---
+  print_status "🔍" "$BLUE" "Wiggum validating..."
+  log "Wiggum validating $FEATURE_ID"
   
-  # Parse Wiggum output
+  WIGGUM_PROMPT="Validate $FEATURE_ID. Check acceptance criteria in $FEATURES_FILE. Output <wiggum>APPROVED</wiggum> or <wiggum>REJECTED</wiggum> with IMMEDIATE ACTIONS NEEDED."
+  
+  if ! opencode run --agent globex-wiggum -m "$MODEL" "$WIGGUM_PROMPT" > "$WIGGUM_OUTPUT" 2>&1; then
+    print_status "⚠" "$YELLOW" "Wiggum exited with error, checking output..."
+  fi
+  
+  # Parse verdict
   if grep -q '<wiggum>APPROVED</wiggum>' "$WIGGUM_OUTPUT"; then
-    log "WIGGUM: APPROVED - $FEATURE_ID validated"
-  elif grep -qoE '<wiggum>REJECTED:[^<]+</wiggum>' "$WIGGUM_OUTPUT"; then
-    REJECTION=$(grep -oE '<wiggum>REJECTED:[^<]+</wiggum>' "$WIGGUM_OUTPUT" | sed 's/<wiggum>REJECTED://;s/<\/wiggum>//')
-    log "WIGGUM: REJECTED - $REJECTION"
-    log "Feedback will be used in next iteration."
+    print_status "✅" "$GREEN" "APPROVED"
+    log "Wiggum approved $FEATURE_ID"
+    
+    # Commit the changes
+    print_status "📦" "$CYAN" "Committing..."
+    COMMIT_MSG="feat(globex): $FEATURE_ID"
+    if git -C "$PROJECT_DIR" add -A && git -C "$PROJECT_DIR" commit -m "$COMMIT_MSG" --quiet; then
+      print_status "✓" "$GREEN" "Committed: $COMMIT_MSG"
+      log "Committed $FEATURE_ID"
+    else
+      print_status "⚠" "$YELLOW" "Nothing to commit (no changes?)"
+      log "No changes to commit for $FEATURE_ID"
+    fi
+    
+    # Mark passes + clear feedback via jq
+    jq --arg id "$FEATURE_ID" '
+      .features |= map(if .id == $id then .passes = true | .completedAt = (now | todate) | del(.feedback) else . end)
+    ' "$FEATURES_FILE" > "$FEATURES_FILE.tmp" && mv "$FEATURES_FILE.tmp" "$FEATURES_FILE"
+    
+    print_status "✓" "$GREEN" "Marked $FEATURE_ID as complete"
+    log "Marked $FEATURE_ID passes=true"
+    
+  elif grep -q '<wiggum>REJECTED</wiggum>' "$WIGGUM_OUTPUT"; then
+    print_status "❌" "$RED" "REJECTED"
+    log "Wiggum rejected $FEATURE_ID"
+    
+    # Extract feedback
+    FEEDBACK=""
+    if grep -q "IMMEDIATE ACTIONS" "$WIGGUM_OUTPUT"; then
+      FEEDBACK=$(sed -n '/IMMEDIATE ACTIONS/,/^$/p' "$WIGGUM_OUTPUT" | head -15 | tr '\n' ' ' | sed 's/  */ /g')
+    else
+      FEEDBACK="Rejected without specific actions"
+    fi
+    
+    echo -e "${DIM}Feedback: ${FEEDBACK:0:100}...${RESET}"
+    
+    # Increment attempts + save feedback to feature in JSON
+    ATTEMPTS=$(jq --arg id "$FEATURE_ID" '.features[] | select(.id == $id) | .attempts // 0' "$FEATURES_FILE")
+    NEW_ATTEMPTS=$((ATTEMPTS + 1))
+    
+    if [[ $NEW_ATTEMPTS -ge 5 ]]; then
+      print_status "🚫" "$RED" "Max attempts (5) reached, blocking $FEATURE_ID"
+      jq --arg id "$FEATURE_ID" --arg fb "$FEEDBACK" '
+        .features |= map(if .id == $id then .blocked = true | .blockedReason = "Max attempts exceeded" | .attempts = 5 | .feedback = $fb else . end)
+      ' "$FEATURES_FILE" > "$FEATURES_FILE.tmp" && mv "$FEATURES_FILE.tmp" "$FEATURES_FILE"
+      log "Blocked $FEATURE_ID after 5 attempts"
+      # Discard changes only when blocking
+      git -C "$PROJECT_DIR" checkout . 2>/dev/null || true
+      git -C "$PROJECT_DIR" clean -fd 2>/dev/null || true
+    else
+      jq --arg id "$FEATURE_ID" --argjson att "$NEW_ATTEMPTS" --arg fb "$FEEDBACK" '
+        .features |= map(if .id == $id then .attempts = $att | .feedback = $fb else . end)
+      ' "$FEATURES_FILE" > "$FEATURES_FILE.tmp" && mv "$FEATURES_FILE.tmp" "$FEATURES_FILE"
+      print_status "↻" "$YELLOW" "Attempt $NEW_ATTEMPTS/5, keeping changes..."
+      log "Attempt $NEW_ATTEMPTS for $FEATURE_ID"
+    fi
+    
   else
-    log "WIGGUM: No verdict tag found. Proceeding."
+    print_status "⚠" "$YELLOW" "No verdict tag, treating as needs retry"
+    log "No verdict from Wiggum"
+    echo -e "${DIM}Last output:${RESET}"
+    tail -5 "$WIGGUM_OUTPUT" | sed 's/^/  /'
   fi
   
   ITERATION=$((ITERATION + 1))
-  
-  log "Iteration complete. Fresh context in 3s..."
-  sleep 3
+  sleep 1
 done
 
-log "════════════════════════════════════════════════════════════"
-log "WARNING: Max iterations ($MAX_ITERATIONS) reached."
-log "Review .globex/progress.md for status."
-log "════════════════════════════════════════════════════════════"
+print_header "⚠ Max iterations reached ($MAX_ITERATIONS)"
+echo -e "${YELLOW}Check .globex/progress.md for status${RESET}"
+log "Max iterations reached"
 exit 1

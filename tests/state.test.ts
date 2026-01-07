@@ -91,16 +91,16 @@ describe("state persistence", () => {
       const initial = createInitialState("test", "desc")
       await Effect.runPromise(writeState(testDir, initial))
       
-      const updated = await Effect.runPromise(updatePhase(testDir, "research"))
+      const updated = await Effect.runPromise(updatePhase(testDir, "plan"))
       
-      expect(updated.currentPhase).toBe("research")
+      expect(updated.currentPhase).toBe("plan")
     })
 
     test("preserves other state fields", async () => {
       const initial = createInitialState("test", "My description")
       await Effect.runPromise(writeState(testDir, initial))
       
-      const updated = await Effect.runPromise(updatePhase(testDir, "research"))
+      const updated = await Effect.runPromise(updatePhase(testDir, "plan"))
       
       expect(updated.projectName).toBe("test")
       expect(updated.description).toBe("My description")
@@ -118,10 +118,10 @@ describe("state persistence", () => {
       }
       
       const updated = await Effect.runPromise(
-        recordApproval(testDir, "research", approval)
+        recordApproval(testDir, "plan", approval)
       )
       
-      expect(updated.approvals.research?.status).toBe("approved")
+      expect(updated.approvals.plan?.status).toBe("approved")
     })
 
     test("records approval with risks", async () => {
@@ -197,17 +197,21 @@ describe("state types", () => {
     const { PHASE_ORDER } = await import("../src/state/types")
     
     expect(PHASE_ORDER[0]).toBe("init")
-    expect(PHASE_ORDER[PHASE_ORDER.length - 1]).toBe("complete")
-    expect(PHASE_ORDER).toContain("research")
+    expect(PHASE_ORDER[PHASE_ORDER.length - 1]).toBe("execute")
+    expect(PHASE_ORDER).toContain("plan")
+    expect(PHASE_ORDER).toContain("interview")
+    expect(PHASE_ORDER).toContain("features")
     expect(PHASE_ORDER).toContain("execute")
   })
 
   test("PHASE_TRANSITIONS allows valid transitions", async () => {
     const { PHASE_TRANSITIONS } = await import("../src/state/types")
     
-    expect(PHASE_TRANSITIONS.init).toContain("research")
-    expect(PHASE_TRANSITIONS.research).toContain("research_interview")
-    expect(PHASE_TRANSITIONS.research_interview).toContain("plan")
-    expect(PHASE_TRANSITIONS.research_interview).toContain("research")
+    // New flow: init → plan → interview → features → execute
+    expect(PHASE_TRANSITIONS.init).toContain("plan")
+    expect(PHASE_TRANSITIONS.plan).toContain("interview")
+    expect(PHASE_TRANSITIONS.interview).toContain("features")
+    expect(PHASE_TRANSITIONS.interview).toContain("plan") // can go back to rework
+    expect(PHASE_TRANSITIONS.features).toContain("execute")
   })
 })
