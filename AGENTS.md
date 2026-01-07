@@ -212,4 +212,5 @@ Each phase has artifacts stored in `.globex/projects/{projectId}/`:
 
 ## Globex Learnings (auto-generated)
 
+- opencode run output contains terminal escape codes. Use `grep -a` (treat as text) when parsing output files, otherwise grep reports "Binary file matches" instead of actual content.
 <!-- end globex learnings -->

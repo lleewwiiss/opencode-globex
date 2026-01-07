@@ -141,18 +141,18 @@ while [[ $ITERATION -le $MAX_ITERATIONS ]]; do
     print_status "⚠" "$YELLOW" "Ralph exited with error, checking output..."
   fi
   
-  # Check completion
-  if grep -q "<promise>$COMPLETION_PROMISE</promise>" "$RALPH_OUTPUT"; then
+  # Check completion (use -a to treat as text, output may contain escape codes)
+  if grep -qa "<promise>$COMPLETION_PROMISE</promise>" "$RALPH_OUTPUT"; then
     print_header "✅ ALL FEATURES COMPLETE"
     echo -e "${GREEN}Total iterations: $ITERATION${RESET}"
     log "Complete at iteration $ITERATION"
     exit 0
   fi
   
-  # Parse DONE tag
+  # Parse DONE tag (use -a to treat as text, output may contain escape codes)
   FEATURE_ID=""
-  if grep -qoE '<ralph>DONE:[^<]+</ralph>' "$RALPH_OUTPUT"; then
-    FEATURE_ID=$(grep -oE '<ralph>DONE:[^<]+</ralph>' "$RALPH_OUTPUT" | head -1 | sed 's/<ralph>DONE://;s/<\/ralph>//')
+  if grep -qaoE '<ralph>DONE:[^<]+</ralph>' "$RALPH_OUTPUT"; then
+    FEATURE_ID=$(grep -aoE '<ralph>DONE:[^<]+</ralph>' "$RALPH_OUTPUT" | head -1 | sed 's/<ralph>DONE://;s/<\/ralph>//')
   fi
   
   if [[ -z "$FEATURE_ID" ]]; then
@@ -179,8 +179,8 @@ while [[ $ITERATION -le $MAX_ITERATIONS ]]; do
     print_status "⚠" "$YELLOW" "Wiggum exited with error, checking output..."
   fi
   
-  # Parse verdict
-  if grep -q '<wiggum>APPROVED</wiggum>' "$WIGGUM_OUTPUT"; then
+  # Parse verdict (use -a to treat as text, output may contain escape codes)
+  if grep -qa '<wiggum>APPROVED</wiggum>' "$WIGGUM_OUTPUT"; then
     print_status "✅" "$GREEN" "APPROVED"
     log "Wiggum approved $FEATURE_ID"
     
@@ -203,13 +203,13 @@ while [[ $ITERATION -le $MAX_ITERATIONS ]]; do
     print_status "✓" "$GREEN" "Marked $FEATURE_ID as complete"
     log "Marked $FEATURE_ID passes=true"
     
-  elif grep -q '<wiggum>REJECTED</wiggum>' "$WIGGUM_OUTPUT"; then
+  elif grep -qa '<wiggum>REJECTED</wiggum>' "$WIGGUM_OUTPUT"; then
     print_status "❌" "$RED" "REJECTED"
     log "Wiggum rejected $FEATURE_ID"
     
     # Extract feedback
     FEEDBACK=""
-    if grep -q "IMMEDIATE ACTIONS" "$WIGGUM_OUTPUT"; then
+    if grep -qa "IMMEDIATE ACTIONS" "$WIGGUM_OUTPUT"; then
       FEEDBACK=$(sed -n '/IMMEDIATE ACTIONS/,/^$/p' "$WIGGUM_OUTPUT" | head -15 | tr '\n' ' ' | sed 's/  */ /g')
     else
       FEEDBACK="Rejected without specific actions"

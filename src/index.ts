@@ -193,7 +193,7 @@ Each feature must be completable in a single stateless iteration.
 ## Feature Schema
 Each feature: id, description, category, acceptanceCriteria, verification, passes: false, priority, dependencies, filesTouched, patternsToFollow, attempts.
 
-When complete, inform user to run /globex-interview to validate.`
+When complete, inform user to run /globex-run to begin execution.`
 
 const RUN_PROMPT = `Execute ONE autonomous Ralph loop iteration.
 

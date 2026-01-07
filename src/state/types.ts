@@ -31,6 +31,23 @@ export interface InterviewHistory {
   startedAt: string
 }
 
+export type LoopStatus = "idle" | "running" | "paused" | "complete"
+
+export interface LoopState {
+  status: LoopStatus
+  currentFeatureId?: string
+  lastCommitHash?: string
+  iteration: number
+  totalIterations?: number
+  startedAt?: string
+  pausedAt?: string
+  ralphSessionId?: string
+  wiggumSessionId?: string
+  lastSignal?: string
+  completedFeatures: string[]
+  blockedFeatures: string[]
+}
+
 export interface ExecutionState {
   iteration: number
   maxIterations: number
