@@ -1,0 +1,54 @@
+{
+  "features": [
+    {
+      "id": "MOCK-001",
+      "description": "Add greeting function to index.ts",
+      "category": "functional",
+      "priority": 1,
+      "acceptanceCriteria": [
+        "src/index.ts exports greet() function",
+        "Function returns 'Hello, {name}!' string"
+      ],
+      "filesTouched": ["src/index.ts"],
+      "estimatedMinutes": 5,
+      "dependencies": [],
+      "passes": false
+    },
+    {
+      "id": "MOCK-002",
+      "description": "Add farewell function to index.ts",
+      "category": "functional",
+      "priority": 2,
+      "acceptanceCriteria": [
+        "src/index.ts exports farewell() function",
+        "Function returns 'Goodbye, {name}!' string"
+      ],
+      "filesTouched": ["src/index.ts"],
+      "estimatedMinutes": 5,
+      "dependencies": ["MOCK-001"],
+      "passes": false
+    },
+    {
+      "id": "MOCK-003",
+      "description": "Add version export to index.ts",
+      "category": "infrastructure",
+      "priority": 3,
+      "acceptanceCriteria": [
+        "src/index.ts exports VERSION constant",
+        "VERSION matches package.json version"
+      ],
+      "filesTouched": ["src/index.ts"],
+      "estimatedMinutes": 5,
+      "dependencies": [],
+      "passes": false
+    }
+  ],
+  "summary": {
+    "total": 3,
+    "byCategory": {
+      "functional": 2,
+      "infrastructure": 1
+    },
+    "estimatedTotalMinutes": 15
+  }
+}

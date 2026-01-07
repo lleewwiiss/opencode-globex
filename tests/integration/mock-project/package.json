@@ -1,0 +1,7 @@
+{
+  "name": "mock-project",
+  "version": "0.1.0",
+  "description": "Integration test fixture for globex",
+  "main": "src/index.ts",
+  "type": "module"
+}

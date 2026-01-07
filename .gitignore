@@ -6,6 +6,8 @@ dist/
 
 # OpenCode/Globex runtime state (project-specific, not plugin)
 .globex/
+# But include test fixtures
+!tests/integration/**/.globex/
 
 # OS files
 .DS_Store
