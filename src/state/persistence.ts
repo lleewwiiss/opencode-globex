@@ -1,6 +1,6 @@
 import { Effect, Layer } from "effect"
 import { NodeFileSystem } from "@effect/platform-node"
-import type { GlobexState, Phase, Approval } from "./types.js"
+import type { GlobexState, Phase, Approval, LoopState } from "./types.js"
 
 import {
   GlobexPersistence,
@@ -12,6 +12,7 @@ import {
   getGlobexBaseDir,
   getProjectDir,
   getStatePath,
+  getLoopStatePath,
   createInitialState,
   DEFAULT_PROJECT,
   type ProjectInfo
@@ -25,6 +26,7 @@ export {
   getGlobexBaseDir,
   getProjectDir,
   getStatePath,
+  getLoopStatePath,
   createInitialState,
   DEFAULT_PROJECT,
   type ProjectInfo
@@ -107,3 +109,31 @@ export const loadState = async (workdir: string, projectId?: string): Promise<Gl
 
 export const saveState = async (workdir: string, state: GlobexState, projectId?: string): Promise<void> =>
   Effect.runPromise(writeState(workdir, state, projectId))
+
+export const loadLoopState = (workdir: string, projectId?: string) =>
+  Effect.gen(function*() {
+    const persistence = yield* GlobexPersistence
+    return yield* persistence.loadLoopState(workdir, projectId)
+  }).pipe(Effect.provide(PersistenceLayer))
+
+export const saveLoopState = (workdir: string, state: LoopState, projectId?: string) =>
+  Effect.gen(function*() {
+    const persistence = yield* GlobexPersistence
+    return yield* persistence.saveLoopState(workdir, state, projectId)
+  }).pipe(Effect.provide(PersistenceLayer))
+
+export const clearLoopState = (workdir: string, projectId?: string) =>
+  Effect.gen(function*() {
+    const persistence = yield* GlobexPersistence
+    return yield* persistence.clearLoopState(workdir, projectId)
+  }).pipe(Effect.provide(PersistenceLayer))
+
+// Async wrappers for loop state
+export const loadLoopStateAsync = async (workdir: string, projectId?: string): Promise<LoopState | null> =>
+  Effect.runPromise(loadLoopState(workdir, projectId))
+
+export const saveLoopStateAsync = async (workdir: string, state: LoopState, projectId?: string): Promise<void> =>
+  Effect.runPromise(saveLoopState(workdir, state, projectId))
+
+export const clearLoopStateAsync = async (workdir: string, projectId?: string): Promise<void> =>
+  Effect.runPromise(clearLoopState(workdir, projectId))

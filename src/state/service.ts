@@ -1,11 +1,12 @@
 import { Context, Effect, Layer } from "effect"
 import { FileSystem } from "@effect/platform"
 import { Schema } from "effect"
-import type { GlobexState, Phase, Approval } from "./types.js"
+import type { GlobexState, Phase, Approval, LoopState } from "./types.js"
 
 const GLOBEX_DIR = ".globex"
 const PROJECTS_DIR = "projects"
 const STATE_FILE = "state.json"
+const LOOP_STATE_FILE = "loop-state.json"
 const ACTIVE_PROJECT_FILE = "active-project"
 export const DEFAULT_PROJECT = "default"
 
@@ -26,6 +27,9 @@ export const getGlobexDir = (workdir: string, projectId?: string): string =>
 
 export const getStatePath = (workdir: string, projectId?: string): string =>
   `${getProjectDir(workdir, projectId || DEFAULT_PROJECT)}/${STATE_FILE}`
+
+export const getLoopStatePath = (workdir: string, projectId?: string): string =>
+  `${getProjectDir(workdir, projectId || DEFAULT_PROJECT)}/${LOOP_STATE_FILE}`
 
 export class StateNotFoundError extends Schema.TaggedError<StateNotFoundError>()(
   "StateNotFoundError",
@@ -71,6 +75,9 @@ export class GlobexPersistence extends Context.Tag("GlobexPersistence")<GlobexPe
   readonly setActiveProject: (workdir: string, projectId: string) => Effect.Effect<void, StateWriteError>
   readonly listProjects: (workdir: string) => Effect.Effect<ProjectInfo[]>
   readonly migrateIfNeeded: (workdir: string) => Effect.Effect<boolean, StateWriteError>
+  readonly loadLoopState: (workdir: string, projectId?: string) => Effect.Effect<LoopState | null, StateParseError>
+  readonly saveLoopState: (workdir: string, state: LoopState, projectId?: string) => Effect.Effect<void, StateWriteError>
+  readonly clearLoopState: (workdir: string, projectId?: string) => Effect.Effect<void, StateWriteError>
 }>() {}
 
 export const GlobexPersistenceLive = Layer.effect(
@@ -229,6 +236,45 @@ export const GlobexPersistenceLive = Layer.effect(
         return true
       })
 
+    const loadLoopState = (workdir: string, projectId?: string): Effect.Effect<LoopState | null, StateParseError> =>
+      Effect.gen(function*() {
+        const pid = yield* resolveProjectId(workdir, projectId)
+        const path = getLoopStatePath(workdir, pid)
+        const exists = yield* fs.exists(path).pipe(Effect.orElseSucceed(() => false))
+        if (!exists) return null
+        
+        const content = yield* fs.readFileString(path).pipe(Effect.orElseSucceed(() => "{}"))
+        return yield* Effect.try({
+          try: () => JSON.parse(content) as LoopState,
+          catch: (e) => new StateParseError({ message: e instanceof Error ? e.message : "Unknown parse error" })
+        })
+      })
+
+    const saveLoopState = (workdir: string, state: LoopState, projectId?: string): Effect.Effect<void, StateWriteError> =>
+      Effect.gen(function*() {
+        const pid = yield* resolveProjectId(workdir, projectId)
+        const dir = getProjectDir(workdir, pid)
+        const path = getLoopStatePath(workdir, pid)
+        yield* fs.makeDirectory(dir, { recursive: true }).pipe(
+          Effect.mapError((e) => new StateWriteError({ path: dir, message: e.message }))
+        )
+        yield* fs.writeFileString(path, JSON.stringify(state, null, 2)).pipe(
+          Effect.mapError((e) => new StateWriteError({ path, message: e.message }))
+        )
+      })
+
+    const clearLoopState = (workdir: string, projectId?: string): Effect.Effect<void, StateWriteError> =>
+      Effect.gen(function*() {
+        const pid = yield* resolveProjectId(workdir, projectId)
+        const path = getLoopStatePath(workdir, pid)
+        const exists = yield* fs.exists(path).pipe(Effect.orElseSucceed(() => false))
+        if (exists) {
+          yield* fs.remove(path).pipe(
+            Effect.mapError((e) => new StateWriteError({ path, message: e.message }))
+          )
+        }
+      })
+
     return {
       readState,
       writeState,
@@ -239,7 +285,10 @@ export const GlobexPersistenceLive = Layer.effect(
       getActiveProject,
       setActiveProject,
       listProjects,
-      migrateIfNeeded
+      migrateIfNeeded,
+      loadLoopState,
+      saveLoopState,
+      clearLoopState
     }
   })
 )
