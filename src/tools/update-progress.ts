@@ -76,9 +76,10 @@ export const createUpdateProgress = (workdir: string): ToolDefinition => tool({
         ? data.features.find(f => f.id === args.currentFeatureId)
         : null
       
-      const learningsSection = state.execution.learnings.length > 0
-        ? state.execution.learnings.map((l: string) => `- ${l}`).join("\n")
-        : "(none yet)"
+      const recentLearnings = state.execution.learnings.slice(-5)
+      const feedbackSection = recentLearnings.length > 0
+        ? recentLearnings.map((l: string) => `- ${l}`).join("\n")
+        : "(none)"
       
       const md = `# Progress
 
@@ -111,8 +112,8 @@ ${remaining
   .join("\n")}
 ${remaining.length > 5 ? `\n... and ${remaining.length - 5} more` : ""}
 
-## Learnings (Erecting Signs)
-${learningsSection}
+## Recent Feedback
+${feedbackSection}
 
 ---
 Last updated: ${new Date().toISOString()}
