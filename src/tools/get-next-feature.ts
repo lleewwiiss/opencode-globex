@@ -4,6 +4,12 @@ import * as fs from "node:fs/promises"
 import * as path from "node:path"
 import { getProjectDir, getActiveProject } from "../state/persistence.js"
 
+interface PatternRef {
+  file: string
+  lines: string
+  pattern: string
+}
+
 interface Feature {
   id: string
   description: string
@@ -16,6 +22,8 @@ interface Feature {
   estimatedMinutes?: number
   blocked?: boolean
   blockedReason?: string
+  attempts?: number
+  patternsToFollow?: PatternRef[]
   [key: string]: unknown
 }
 
@@ -85,6 +93,8 @@ Returns JSON with one of:
           filesTouched: next.filesTouched,
           estimatedMinutes: next.estimatedMinutes,
           dependencies: next.dependencies,
+          patternsToFollow: next.patternsToFollow ?? [],
+          attempts: next.attempts ?? 0,
         },
         progress: {
           completed: data.features.length - remaining,
