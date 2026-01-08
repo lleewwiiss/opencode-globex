@@ -233,7 +233,23 @@ export function InitScreen(props: InitScreenProps) {
         {/* Animated Logo */}
         <box flexDirection="column" alignItems="center" marginBottom={2}>
           <For each={LOGO_FRAMES[logoFrame()]}>
-            {(line) => <text fg={colors.purple}>{line}</text>}
+            {(line) => {
+              // Diamond icon (◈) gets cyan, GLOBEX CORPORATION gets fg, rest purple
+              if (line.includes("◈")) {
+                const parts = line.split("◈")
+                return (
+                  <text>
+                    <text fg={colors.purple}>{parts[0]}</text>
+                    <text fg={colors.cyan}>◈</text>
+                    <text fg={colors.purple}>{parts[1]}</text>
+                  </text>
+                )
+              }
+              if (line.includes("GLOBEX")) {
+                return <text fg={colors.fg}>{line}</text>
+              }
+              return <text fg={colors.purple}>{line}</text>
+            }}
           </For>
         </box>
 
