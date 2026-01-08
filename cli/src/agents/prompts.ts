@@ -111,7 +111,7 @@ Read the current feature from features.json (the one with passes: false and lowe
 1. Follow patterns from patternsToFollow exactly
 2. Match existing code style precisely
 3. Meet ALL acceptance criteria
-4. DO NOT commit - the plugin handles commits
+4. DO NOT commit - Globex handles commits
 
 ## Workflow
 1. Read the feature specification
@@ -167,4 +167,4 @@ On rejection:
 
 The reasons array must be specific and actionable for Ralph's next attempt.
 
-DO NOT commit. The plugin handles commits after approval.`
+DO NOT commit. Globex handles commits after approval.`

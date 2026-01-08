@@ -1,6 +1,6 @@
 # AGENTS.md
 
-OpenCode plugin for agentic PRD generation with human-in-the-loop validation.
+CLI tool for agentic PRD generation with human-in-the-loop validation.
 
 ## Build Commands
 
@@ -14,8 +14,8 @@ bun run check          # lint + build + test (use before commit)
 
 ```bash
 bun test                              # All tests
-bun test tests/tools.test.ts          # Single file
-bun test tests/tools.test.ts -t "globex_init"  # Single test by name
+bun test cli/tests/loop/ralph.test.ts # Single file
+bun test cli/tests/loop/ralph.test.ts -t "executes"  # Single test by name
 bun test --watch                      # Watch mode
 bun test:unit                         # Unit tests only
 bun test:integration                  # Integration tests only
@@ -24,13 +24,14 @@ bun test:integration                  # Integration tests only
 ## Lint Commands
 
 ```bash
-bun run lint           # oxlint src/
+bun run lint           # oxlint cli/src/
 bun run lint:fix       # oxlint with auto-fix
 ```
 
 ## Architecture
 
-- **Plugin SDK**: `@opencode-ai/plugin` for tool/command/agent definitions
+- **OpenCode SDK**: `@opencode-ai/sdk` for spawning agent sessions
+- **TUI Framework**: `@opentui/solid` for terminal UI
 - **Runtime**: Bun (not Node.js)
 - **FP Library**: Effect-TS exclusively - no raw Promises or try-catch
 - **Module Format**: ESM with `.js` extensions in imports
@@ -42,12 +43,11 @@ bun run lint:fix       # oxlint with auto-fix
 Order: external packages > internal modules > types
 
 ```typescript
-import { tool, type ToolDefinition } from "@opencode-ai/plugin"
+import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { Effect, Schema } from "effect"
-import * as fs from "node:fs/promises"
 import * as path from "node:path"
-import { someFunction } from "../state/persistence.js"  // .js extension required
-import type { GlobexState } from "../state/types.js"
+import { loadState } from "./state/persistence.js"  // .js extension required
+import type { Phase } from "./state/types.js"
 ```
 
 ### Effect-TS Patterns
@@ -80,24 +80,6 @@ const PersistenceLayer = GlobexPersistenceLive.pipe(
 )
 ```
 
-### Tool Definitions
-
-```typescript
-export const createSomeTool = (workdir: string): ToolDefinition => tool({
-  description: `Brief description.
-
-Returns JSON: {success: true, ...} or {success: false, error}`,
-  args: {
-    required: tool.schema.string(),
-    optional: tool.schema.boolean().optional(),
-  },
-  async execute(args) {
-    // Implementation
-    return JSON.stringify({ success: true, ... })
-  },
-})
-```
-
 ### Schema Definitions
 
 Use Effect Schema for validation:
@@ -120,15 +102,14 @@ export const FeatureSchema = Schema.Struct({
 
 ### Naming Conventions
 
-- Files: kebab-case (`save-artifact.ts`, `get-next-feature.ts`)
-- Types/Interfaces: PascalCase (`GlobexState`, `ToolDefinition`)
-- Functions: camelCase (`createGlobexInit`, `getActiveProject`)
+- Files: kebab-case (`ralph.ts`, `persistence.ts`)
+- Types/Interfaces: PascalCase (`GlobexState`, `Feature`)
+- Functions: camelCase (`runRalphLoop`, `loadState`)
 - Constants: SCREAMING_SNAKE_CASE or camelCase depending on scope
-- Tool names: snake_case (`globex_init`, `globex_save_artifact`)
 
 ### Error Handling
 
-Return JSON with success/error pattern:
+Return JSON with success/error pattern for functions that need structured responses:
 
 ```typescript
 if (errorCondition) {
@@ -165,7 +146,7 @@ Bun test framework with describe/test/expect:
 ```typescript
 import { describe, test, expect, beforeEach, afterEach } from "bun:test"
 
-describe("tool_name", () => {
+describe("feature", () => {
   let testDir: string
 
   beforeEach(async () => {
@@ -177,10 +158,8 @@ describe("tool_name", () => {
   })
 
   test("does something", async () => {
-    const tool = createTool(testDir)
-    const result = await tool.execute(args, mockContext())
-    const parsed = JSON.parse(result)
-    expect(parsed.success).toBe(true)
+    const result = await someFunction(testDir)
+    expect(result.success).toBe(true)
   })
 })
 ```
@@ -188,21 +167,43 @@ describe("tool_name", () => {
 ## Project Structure
 
 ```
-src/
-  index.ts              # Plugin entry, commands, agents, event handlers
-  tools/                # Tool implementations (one per file)
-  state/
-    types.ts            # TypeScript types
-    schema.ts           # Effect Schema definitions
-    service.ts          # Effect service layer
-    persistence.ts      # Async wrappers for service
-tests/
-  *.test.ts             # Test files mirror src structure
+cli/
+  bin/
+    globex.ts           # CLI entry point (yargs)
+  src/
+    index.ts            # Main entry, TUI startup
+    app.tsx             # TUI application (OpenTUI/Solid)
+    config.ts           # Configuration loading
+    git.ts              # Git operations
+    loop/
+      ralph.ts          # Ralph loop executor
+      signals.ts        # File marker detection
+    phases/
+      engine.ts         # Phase execution
+      approval.ts       # Approval handling
+    agents/
+      prompts.ts        # Agent prompt templates
+    opencode/
+      server.ts         # OpenCode server management
+      session.ts        # Session handling
+      events.ts         # Event subscription
+    state/
+      types.ts          # TypeScript types
+      schema.ts         # Effect Schema definitions
+      persistence.ts    # State CRUD
+    features/
+      manager.ts        # Feature tracking
+    artifacts/
+      save.ts           # Artifact persistence
+      validators.ts     # Citation validation
+    components/         # TUI components
+  tests/
+    *.test.ts           # Test files
 ```
 
 ## Globex Workflow Phases
 
-init -> plan -> interview -> features -> execute
+init -> research -> research_interview -> plan -> plan_interview -> features -> execute -> complete
 
 Each phase has artifacts stored in `.globex/projects/{projectId}/`:
 - `state.json` - workflow state

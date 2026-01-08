@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  An <a href="https://opencode.ai">OpenCode</a> plugin
+  CLI tool powered by <a href="https://opencode.ai">OpenCode</a>
 </p>
 
 <p align="center">
@@ -37,11 +37,11 @@ Named after Hank Scorpio's company. The "Ralph loop" is named after Ralph Wiggum
 
 ## Features
 
-- **Automatic command registration** — All `/globex-*` commands register via plugin config hook
-- **Subagent isolation** — Research, interview, plan, and features phases run in isolated subagents
-- **Toast notifications** — Visual feedback on phase approvals and feature completions
-- **Session events** — Auto-detects existing projects, logs errors to progress.md
-- **58 tests** — Full coverage of state persistence, tools, and integration
+- **Standalone CLI** — Run `globex` from any project directory
+- **TUI interface** — Real-time progress display with OpenTUI
+- **OpenCode SDK integration** — Spawns sessions for each agent
+- **Phase-based workflow** — Research, plan, features, execute
+- **Coach/player pattern** — Ralph implements, Wiggum validates
 
 ---
 
@@ -57,7 +57,7 @@ Named after Hank Scorpio's company. The "Ralph loop" is named after Ralph Wiggum
    (approve)           (approve)           (approve)         (autonomous)
 ```
 
-Each phase requires human approval via `/globex-interview` before proceeding.
+Each phase requires human approval before proceeding.
 
 ---
 
@@ -67,44 +67,39 @@ Each phase requires human approval via `/globex-interview` before proceeding.
 git clone https://github.com/yourorg/globex.git
 cd globex
 bun install
-bun run build
+bun link
 ```
 
-Add to your OpenCode configuration or symlink to plugins directory.
+This makes the `globex` command available globally.
 
 ---
 
 ## Usage
 
-### Initialize
+### Initialize a new project
 
 ```bash
-opencode
-> /globex-init
+globex init "Add dark mode support"
 ```
 
-### Research → Plan → Features
+### Continue existing workflow
 
 ```bash
-> /globex-research      # Subagent explores codebase (read-only)
-> /globex-interview     # Subagent validates research with human
-
-> /globex-plan          # Subagent creates implementation plan  
-> /globex-interview     # Subagent validates plan with human
-
-> /globex-features      # Subagent breaks into atomic features
-> /globex-interview     # Subagent validates features with human
-
-> /globex-status        # Check current phase anytime
-> /globex-help          # Show workflow help
+globex continue              # Resume active project
+globex continue my-project   # Resume specific project
 ```
 
-### Execute
+### Check status
 
 ```bash
-./scripts/ralph-loop.sh --max-iterations 50
+globex status
+```
 
-# To stop the loop, press Ctrl+C
+### Options
+
+```bash
+globex --help                          # Show all commands
+globex init "desc" --model anthropic/claude-sonnet-4  # Specify model
 ```
 
 ---
@@ -120,14 +115,7 @@ Coach/player pattern with two agents per iteration:
 3. On rejection, Ralph retries with feedback in next iteration
 4. Fresh context between iterations (stateless execution)
 
-```bash
-./scripts/ralph-loop.sh --max-iterations 50
-
-# Monitor in another terminal:
-tail -f .globex/ralph-loop.log
-```
-
-Loop continues until `<promise>ALL_FEATURES_COMPLETE</promise>`.
+Loop continues until all features complete.
 
 ### Feature Sizing
 
@@ -148,63 +136,46 @@ Features sized for ~50% of agent context window:
 | `passes: true` | Implemented and verified |
 | `blocked: true` | Cannot progress (skipped by loop) |
 
-### Erecting Signs
-
-Agent persists operational knowledge for future iterations:
-
-```
-globex_add_learning(learning: "Run migrations before seeding")
-```
-
 ---
 
 ## Project Structure
 
 ```
 globex/
-├── src/
-│   ├── index.ts                 # Plugin entry (commands, agents, events)
-│   ├── state/
-│   │   ├── types.ts             # Phase, ExecutionState types
-│   │   ├── schema.ts            # Effect Schema definitions
-│   │   ├── service.ts           # GlobexPersistence service layer
-│   │   └── persistence.ts       # State CRUD (re-exports from service)
-│   └── tools/                   # 11 custom tools
-├── skills/                      # Skill markdown files (reference)
-├── scripts/
-│   └── ralph-loop.sh            # Coach/player loop (Ralph + Wiggum)
-├── tests/                       # 58 tests (state, tools, integration)
-├── opencode.json                # Plugin configuration
-└── package.json
-```
-
----
-
-## Tools
-
-| Tool | Description |
-|:-----|:------------|
-| `globex_init` | Initialize project with name and description |
-| `globex_status` | Get current phase and project state |
-| `globex_save_artifact` | Save .md/.json files to .globex/ |
-| `globex_approve_phase` | Record approval decision, transition phase |
-| `globex_verify_citation` | Validate file:line citations exist |
-| `globex_check_convergence` | Track interview progress toward completion |
-| `globex_update_feature` | Mark feature as complete/blocked |
-| `globex_get_next_feature` | Pick next eligible feature by priority |
-| `globex_update_progress` | Generate progress.md with current state |
-| `globex_add_learning` | Write operational knowledge to AGENTS.md |
-| `globex_set_phase` | Manually set workflow phase |
-
----
-
-## Development
-
-```bash
-bun run check    # lint + build + test
-bun run lint     # oxlint
-bun run build    # tsc
-bun test         # 58 tests
+├── cli/
+│   ├── bin/
+│   │   └── globex.ts          # CLI entry point (yargs)
+│   ├── src/
+│   │   ├── index.ts           # Main entry, TUI startup
+│   │   ├── app.tsx            # TUI application (OpenTUI/Solid)
+│   │   ├── loop/
+│   │   │   ├── ralph.ts       # Ralph loop executor
+│   │   │   └── signals.ts     # File marker detection
+│   │   ├── phases/
+│   │   │   ├── engine.ts      # Phase execution engine
+│   │   │   └── approval.ts    # Approval handling
+│   │   ├── agents/
+│   │   │   └── prompts.ts     # Agent prompt templates
+│   │   ├── opencode/
+│   │   │   ├── server.ts      # OpenCode server management
+│   │   │   ├── session.ts     # Session handling
+│   │   │   └── events.ts      # Event subscription
+│   │   ├── state/
+│   │   │   ├── types.ts       # TypeScript types
+│   │   │   ├── schema.ts      # Effect Schema definitions
+│   │   │   └── persistence.ts # State CRUD
+│   │   ├── features/
+│   │   │   └── manager.ts     # Feature tracking
+│   │   ├── artifacts/
+│   │   │   ├── save.ts        # Artifact persistence
+│   │   │   └── validators.ts  # Citation validation
+│   │   ├── components/        # TUI components
+│   │   ├── config.ts          # Configuration loading
+│   │   └── git.ts             # Git operations
+│   └── tests/                 # Test files
+├── .globex/                   # Runtime state (gitignored)
+├── package.json
+└── tsconfig.json
 ```
 
 ---
@@ -213,15 +184,24 @@ bun test         # 58 tests
 
 ```
 .globex/
-├── state.json              # Phase, approvals, execution state
-├── research.md             # Research findings
-├── research.citations.json # File:line citations for research claims
-├── plan.md                 # Implementation plan
-├── plan.risks.json         # Risk assessment with mitigations
-├── features.json           # Feature list with pass/fail status
-├── progress.md             # Current progress, learnings
-├── errors.log              # Session errors
-└── ralph-loop.log          # Ralph loop execution log
+├── config.json             # CLI configuration
+└── projects/{projectId}/
+    ├── state.json          # Phase, approvals, execution state
+    ├── research.md         # Research findings
+    ├── plan.md             # Implementation plan
+    ├── features.json       # Feature list with pass/fail status
+    └── progress.md         # Current progress
+```
+
+---
+
+## Development
+
+```bash
+bun run check    # lint + build + test
+bun run lint     # oxlint cli/src/
+bun run build    # tsc
+bun test         # all tests
 ```
 
 ---
