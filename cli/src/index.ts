@@ -5,12 +5,14 @@ import { getOrCreateOpencodeServer } from "./opencode/server.js"
 import { loadState, checkStateExists, getProjectDir, createState, saveState, sanitizeProjectId, setActiveProject, getActiveProject } from "./state/persistence.js"
 import { loadConfig } from "./config.js"
 import { runRalphLoop, type RalphLoopCallbacks } from "./loop/ralph.js"
+import { createSignal, removeSignal } from "./loop/signals.js"
 import { runResearchPhase } from "./phases/research.js"
 import { runResearchInterviewPhase } from "./phases/research-interview.js"
 import { runPlanPhase } from "./phases/plan.js"
 import { runPlanInterviewPhase } from "./phases/plan-interview.js"
 import { runFeaturesPhase } from "./phases/features.js"
 import { getProgressStats, getFeatureCategories } from "./features/manager.js"
+import { log } from "./util/log.js"
 import type { Phase, ToolEvent } from "./state/types.js"
 import type { Feature } from "./state/schema.js"
 import { Effect } from "effect"
@@ -172,6 +174,15 @@ function createLoopCallbacks(setState: Setter<AppState>): RalphLoopCallbacks {
     },
     onError: () => {
       // Errors are logged to debug.log - no UI event needed
+    },
+    onCommitsUpdated: (commits) => {
+      setState((prev) => ({
+        ...prev,
+        execute: {
+          ...prev.execute,
+          commits,
+        },
+      }))
     },
   }
 }
@@ -610,6 +621,16 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
         if (currentProjectId) {
           await transitionToExecute(client, setState, workdir, currentProjectId, model, signal)
           currentPhase = "execute"
+        }
+      },
+      onPauseToggle: async (paused) => {
+        log("index", "onPauseToggle called", { paused, workdir })
+        if (paused) {
+          await createSignal(workdir, "pause")
+          log("index", "Pause signal created")
+        } else {
+          await removeSignal(workdir, "pause")
+          log("index", "Pause signal removed")
         }
       },
     }

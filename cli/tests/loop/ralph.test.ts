@@ -34,6 +34,7 @@ const createMockCallbacks = (): RalphLoopCallbacks => ({
   onResumed: mock(() => {}),
   onComplete: mock(() => {}),
   onError: mock(() => {}),
+  onCommitsUpdated: mock(() => {}),
 })
 
 // Create async generator that simulates SSE event stream

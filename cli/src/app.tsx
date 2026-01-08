@@ -78,6 +78,7 @@ export interface AppCallbacks {
   onInterviewAnswer?: (answer: string) => void
   onConfirmExecute?: () => void
   onKeyboardEvent?: () => void
+  onPauseToggle?: (paused: boolean) => void
 }
 
 export interface AppProps {
@@ -183,6 +184,7 @@ function ExecuteScreen(props: {
   setState: Setter<AppState>
   onQuit: () => void
   onKeyboardEvent?: () => void
+  onPauseToggle?: (paused: boolean) => void
 }) {
   const renderer = useRenderer()
   const [elapsed, setElapsed] = createSignal(0)
@@ -229,10 +231,12 @@ function ExecuteScreen(props: {
         renderer.destroy()
         props.onQuit()
       } else if (keyName === "p" && !key.ctrl) {
+        const newPaused = !props.state.paused
         props.setState((prev) => ({
           ...prev,
-          execute: { ...prev.execute, paused: !prev.execute.paused },
+          execute: { ...prev.execute, paused: newPaused },
         }))
+        props.onPauseToggle?.(newPaused)
       } else if (keyName === "c" && key.ctrl) {
         renderer.setTerminalTitle("")
         renderer.destroy()
@@ -332,6 +336,7 @@ export function App(props: AppProps) {
           setState={setState}
           onQuit={handleQuit}
           onKeyboardEvent={props.callbacks.onKeyboardEvent}
+          onPauseToggle={props.callbacks.onPauseToggle}
         />
       </Match>
     </Switch>

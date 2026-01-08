@@ -35,6 +35,7 @@ const getSignalPath = (workdir: string, type: SignalType): string =>
 export class SignalService extends Context.Tag("SignalService")<SignalService, {
   readonly checkSignal: (workdir: string, type: SignalType) => Effect.Effect<boolean>
   readonly createSignal: (workdir: string, type: SignalType) => Effect.Effect<void, SignalError>
+  readonly removeSignal: (workdir: string, type: SignalType) => Effect.Effect<void, SignalError>
   readonly clearSignals: (workdir: string) => Effect.Effect<void, SignalError>
   readonly watchForSignal: (workdir: string, type: SignalType, timeoutMs: number) => Effect.Effect<boolean, SignalTimeoutError>
 }>() {}
@@ -53,6 +54,17 @@ export const SignalServiceLive = Layer.effect(
       fs.writeFileString(getSignalPath(workdir, type), "").pipe(
         Effect.mapError((e) => new SignalError({ message: `Failed to create ${type} signal: ${e.message}` }))
       )
+
+    const removeSignal = (workdir: string, type: SignalType): Effect.Effect<void, SignalError> =>
+      Effect.gen(function* () {
+        const path = getSignalPath(workdir, type)
+        const exists = yield* fs.exists(path).pipe(Effect.orElseSucceed(() => false))
+        if (exists) {
+          yield* fs.remove(path).pipe(
+            Effect.mapError((e) => new SignalError({ message: `Failed to remove ${type} signal: ${e.message}` }))
+          )
+        }
+      })
 
     const clearSignals = (workdir: string): Effect.Effect<void, SignalError> =>
       Effect.gen(function* () {
@@ -81,7 +93,7 @@ export const SignalServiceLive = Layer.effect(
         return yield* Effect.fail(new SignalTimeoutError({ signal: type, timeoutMs }))
       })
 
-    return { checkSignal, createSignal, clearSignals, watchForSignal }
+    return { checkSignal, createSignal, removeSignal, clearSignals, watchForSignal }
   })
 )
 
@@ -101,6 +113,12 @@ export const createSignalEffect = (workdir: string, type: SignalType) =>
     return yield* service.createSignal(workdir, type)
   }).pipe(Effect.provide(SignalLayer))
 
+export const removeSignalEffect = (workdir: string, type: SignalType) =>
+  Effect.gen(function* () {
+    const service = yield* SignalService
+    return yield* service.removeSignal(workdir, type)
+  }).pipe(Effect.provide(SignalLayer))
+
 export const clearSignalsEffect = (workdir: string) =>
   Effect.gen(function* () {
     const service = yield* SignalService
@@ -118,6 +136,9 @@ export const checkSignal = async (workdir: string, type: SignalType): Promise<bo
 
 export const createSignal = async (workdir: string, type: SignalType): Promise<void> =>
   Effect.runPromise(createSignalEffect(workdir, type))
+
+export const removeSignal = async (workdir: string, type: SignalType): Promise<void> =>
+  Effect.runPromise(removeSignalEffect(workdir, type))
 
 export const clearSignals = async (workdir: string): Promise<void> =>
   Effect.runPromise(clearSignalsEffect(workdir))

@@ -4,7 +4,7 @@ import { getNextFeature, updateFeature } from "../features/manager.js"
 import { checkSignal, clearSignals } from "./signals.js"
 import { parseModel } from "../opencode/session.js"
 import { getProjectDir } from "../state/persistence.js"
-import { commitChanges } from "../git.js"
+import { commitChanges, getHeadHash, getCommitsSince } from "../git.js"
 import { RALPH_PROMPT, WIGGUM_PROMPT } from "../agents/prompts.js"
 import { log } from "../util/log.js"
 import { Effect } from "effect"
@@ -35,6 +35,7 @@ export interface RalphLoopCallbacks {
   onResumed: () => void
   onComplete: (completedCount: number, totalCount: number) => void
   onError: (error: Error) => void
+  onCommitsUpdated: (commits: number) => void
 }
 
 export interface RalphLoopResult {
@@ -245,7 +246,10 @@ export async function runRalphLoop(
   const blockedFeatures: string[] = []
   let iteration = 0
 
-  log("ralph", "runRalphLoop started", { projectId, model })
+  // Track initial commit hash for counting commits
+  const initialCommitHash = await getHeadHash(workdir)
+
+  log("ralph", "runRalphLoop started", { projectId, model, initialCommitHash })
 
   try {
     while (!signal?.aborted) {
@@ -347,6 +351,11 @@ export async function runRalphLoop(
         // Commit changes and update feature as passed (clear rejection feedback)
         log("ralph", "Chief Wiggum APPROVED", { featureId: nextFeature.id })
         await commitChanges(workdir, `feat(${nextFeature.id}): implement feature`)
+        
+        // Update commit count in TUI
+        const commits = await getCommitsSince(workdir, initialCommitHash)
+        callbacks.onCommitsUpdated(commits.length)
+        
         const updatedFeatures = updateFeature(features, nextFeature.id, {
           passes: true,
           lastRejectionFeedback: undefined,

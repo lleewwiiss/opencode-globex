@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-import { createSignal, createMemo, createEffect, onCleanup, Show } from "solid-js"
+import { createSignal, createMemo, createEffect, onCleanup, Show, For } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
 import type { SelectOption } from "@opentui/core"
 import { colors } from "../colors.js"
@@ -22,8 +22,106 @@ export interface InitScreenProps {
 
 type InitStep = "select" | "input"
 
-// Placeholder for future animated logo frames
-const LOGO_FRAMES: string[] = []
+// ASCII art frames for rotating orbital ring around globe
+// Each frame: 9 lines tall, ~27 chars wide, diamond center, orbital ring rotates
+const LOGO_FRAMES: string[][] = [
+  // Frame 0: Ring at top
+  [
+    "        ╭───────────╮        ",
+    "    ╭───┤  ═══════  ├───╮   ",
+    "   │    ╰───────────╯    │  ",
+    "   │         ◈           │  ",
+    "   │                     │  ",
+    "   ╰──────────────────────╯ ",
+    "                            ",
+    "    GLOBEX  CORPORATION     ",
+    "                            ",
+  ],
+  // Frame 1: Ring at top-right
+  [
+    "                     ╱──╮   ",
+    "    ╭───────────╮ ══╱   │   ",
+    "   │            │      ╱    ",
+    "   │      ◈     │    ╱      ",
+    "   │            ╰──╱        ",
+    "   ╰──────────────╯         ",
+    "                            ",
+    "    GLOBEX  CORPORATION     ",
+    "                            ",
+  ],
+  // Frame 2: Ring at right
+  [
+    "                       │    ",
+    "    ╭──────────────╮   │    ",
+    "   │               ║   │    ",
+    "   │      ◈        ║ ══╡    ",
+    "   │               ║   │    ",
+    "   ╰──────────────╯    │    ",
+    "                       │    ",
+    "    GLOBEX  CORPORATION     ",
+    "                            ",
+  ],
+  // Frame 3: Ring at bottom-right
+  [
+    "                            ",
+    "    ╭──────────────╮        ",
+    "   │            ╭──╲        ",
+    "   │      ◈     │    ╲      ",
+    "   │            │      ╲    ",
+    "   ╰───────────╯  ══╲   │   ",
+    "                     ╲──╯   ",
+    "    GLOBEX  CORPORATION     ",
+    "                            ",
+  ],
+  // Frame 4: Ring at bottom
+  [
+    "                            ",
+    "    ╭──────────────────────╮",
+    "   │                     │  ",
+    "   │         ◈           │  ",
+    "   │    ╭───────────╮    │  ",
+    "   ╰───┤  ═══════  ├───╯   ",
+    "        ╰───────────╯       ",
+    "    GLOBEX  CORPORATION     ",
+    "                            ",
+  ],
+  // Frame 5: Ring at bottom-left
+  [
+    "                            ",
+    "        ╭──────────────╮    ",
+    "        ╱──╮            │   ",
+    "      ╱    │     ◈      │   ",
+    "    ╱      │            │   ",
+    "   │   ╱══  ╰───────────╯   ",
+    "   ╰──╱                     ",
+    "    GLOBEX  CORPORATION     ",
+    "                            ",
+  ],
+  // Frame 6: Ring at left
+  [
+    "    │                       ",
+    "    │   ╭──────────────╮    ",
+    "    │   ║               │   ",
+    "    ╞══ ║        ◈      │   ",
+    "    │   ║               │   ",
+    "    │    ╰──────────────╯   ",
+    "    │                       ",
+    "    GLOBEX  CORPORATION     ",
+    "                            ",
+  ],
+  // Frame 7: Ring at top-left
+  [
+    "   ╭──╲                     ",
+    "   │   ╲══  ╭───────────╮   ",
+    "    ╲      │            │   ",
+    "      ╲    │     ◈      │   ",
+    "        ╲──╯            │   ",
+    "         ╰──────────────╯   ",
+    "                            ",
+    "    GLOBEX  CORPORATION     ",
+    "                            ",
+  ],
+]
 
 export function InitScreen(props: InitScreenProps) {
   const hasActiveProject = createMemo(() => !!props.activeProject)
@@ -132,16 +230,11 @@ export function InitScreen(props: InitScreenProps) {
         paddingLeft={2}
         paddingRight={2}
       >
-        {/* Logo */}
+        {/* Animated Logo */}
         <box flexDirection="column" alignItems="center" marginBottom={2}>
-          <text fg={colors.purple}>{"╭──────────────────╮"}</text>
-          <text fg={colors.purple}>
-            {"│"}
-            <span style={{ fg: colors.cyan }}>{" ◈ "}</span>
-            <span style={{ fg: colors.fg }}>{"GLOBEX"}</span>
-            {"         │"}
-          </text>
-          <text fg={colors.purple}>{"╰──────────────────╯"}</text>
+          <For each={LOGO_FRAMES[logoFrame()]}>
+            {(line) => <text fg={colors.purple}>{line}</text>}
+          </For>
         </box>
 
         {/* Select Step */}
