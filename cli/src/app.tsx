@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
-import { createSignal, createMemo, createEffect, onCleanup } from "solid-js"
-import { useKeyboard } from "@opentui/solid"
+import { createSignal, createMemo, createEffect, onCleanup, type Setter } from "solid-js"
+import { render, useKeyboard, useRenderer } from "@opentui/solid"
 import { Header } from "./components/header.js"
 import { Log, getEventKey } from "./components/log.js"
 import { Footer } from "./components/footer.js"
@@ -26,6 +26,52 @@ export interface TUIState {
 export interface AppProps {
   initialState: TUIState
   onQuit: () => void
+  onKeyboardEvent?: () => void
+}
+
+export interface StartAppResult {
+  exitPromise: Promise<void>
+  setState: Setter<TUIState>
+}
+
+let globalSetState: Setter<TUIState> | null = null
+
+export async function startApp(
+  initialState: TUIState,
+  onQuit: () => void,
+  onKeyboardEvent?: () => void
+): Promise<StartAppResult> {
+  let exitResolve!: () => void
+  const exitPromise = new Promise<void>((resolve) => {
+    exitResolve = resolve
+  })
+
+  const wrappedOnQuit = () => {
+    onQuit()
+    exitResolve()
+  }
+
+  await render(
+    () => (
+      <App
+        initialState={initialState}
+        onQuit={wrappedOnQuit}
+        onKeyboardEvent={onKeyboardEvent}
+      />
+    ),
+    {
+      targetFps: 30,
+      gatherStats: false,
+      exitOnCtrlC: false,
+      useKittyKeyboard: {},
+    }
+  )
+
+  if (!globalSetState) {
+    throw new Error("TUI state setter not initialized")
+  }
+
+  return { exitPromise, setState: globalSetState }
 }
 
 export function App(props: AppProps) {
@@ -58,9 +104,17 @@ export function App(props: AppProps) {
     onCleanup(() => clearInterval(interval))
   })
 
+  // Track if keyboard event callback was fired
+  let keyboardEventNotified = false
+
   // Keyboard handling
   useKeyboard(
     (key: { name: string }) => {
+      if (!keyboardEventNotified && props.onKeyboardEvent) {
+        keyboardEventNotified = true
+        props.onKeyboardEvent()
+      }
+
       if (key.name === "q") {
         props.onQuit()
       } else if (key.name === "p") {
@@ -70,8 +124,8 @@ export function App(props: AppProps) {
     {}
   )
 
-  // Expose state setter for external updates
-  ;(globalThis as Record<string, unknown>).__tuiSetState = setState
+  // Export state setter for external access
+  globalSetState = setState
 
   return (
     <box
