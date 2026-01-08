@@ -1,16 +1,14 @@
 #!/bin/bash
 
-echo -e "\033[1;31m[DEPRECATED]\033[0m This shell script is deprecated."
-echo "Use the OpenCode plugin instead: /globex-loop start"
-echo "The plugin provides better integration and reliability."
-exit 1
+# Note: Plugin loop (globex_loop_control) has SDK bugs - using bash script for now
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 GLOBEX_DIR="$PROJECT_DIR/.globex"
 LOG_FILE="$GLOBEX_DIR/ralph-loop.log"
 MAX_ITERATIONS=100
-MODEL="anthropic/claude-sonnet-4-20250514"
+MODEL="anthropic/claude-opus-4-5"
+VARIANT="max"
 COMPLETION_PROMISE="ALL_FEATURES_COMPLETE"
 
 # Read active project
@@ -34,7 +32,8 @@ USAGE:
 
 OPTIONS:
   --max-iterations <n>    Max iterations (default: 100)
-  --model <model>         Model to use (default: anthropic/claude-sonnet-4-20250514)
+  --model <model>         Model to use (default: anthropic/claude-opus-4-5)
+  --variant <variant>     Reasoning effort: max, high, minimal (default: max)
   -h, --help              Show help
 
 FLOW:
@@ -72,6 +71,9 @@ while [[ $# -gt 0 ]]; do
     --model)
       [[ -z "${2:-}" ]] && { echo "Error: --model requires name" >&2; exit 1; }
       MODEL="$2"; shift 2 ;;
+    --variant)
+      [[ -z "${2:-}" ]] && { echo "Error: --variant requires value (max, high, minimal)" >&2; exit 1; }
+      VARIANT="$2"; shift 2 ;;
     *) echo "Unknown: $1" >&2; usage; exit 1 ;;
   esac
 done
@@ -105,7 +107,7 @@ if [[ -f "$FEATURES_FILE" ]]; then
 fi
 
 print_header "Ralph Loop: $ACTIVE_PROJECT"
-echo -e "${DIM}Model: $MODEL | Max: $MAX_ITERATIONS iterations${RESET}"
+echo -e "${DIM}Model: $MODEL | Variant: $VARIANT | Max: $MAX_ITERATIONS iterations${RESET}"
 echo -e "${DIM}Progress: $COMPLETE/$TOTAL features${RESET}\n"
 
 log "Started: $ACTIVE_PROJECT, model=$MODEL"
@@ -129,7 +131,7 @@ while [[ $ITERATION -le $MAX_ITERATIONS ]]; do
   log "Ralph starting iteration $ITERATION"
   
   # Capture output, suppress live output
-  if ! opencode run --agent globex-ralph -m "$MODEL" \
+  if ! opencode run --agent globex-ralph -m "$MODEL" --variant "$VARIANT" \
     "Implement ONE feature. Output <ralph>DONE:FEATURE_ID</ralph> when ready for validation. Do NOT commit. Do NOT call globex_update_feature with passes:true." \
     > "$RALPH_OUTPUT" 2>&1; then
     print_status "⚠" "$YELLOW" "Ralph exited with error, checking output..."
@@ -169,7 +171,7 @@ while [[ $ITERATION -le $MAX_ITERATIONS ]]; do
   
   WIGGUM_PROMPT="Validate $FEATURE_ID. Check acceptance criteria in $FEATURES_FILE. Output <wiggum>APPROVED</wiggum> or <wiggum>REJECTED</wiggum> with IMMEDIATE ACTIONS NEEDED."
   
-  if ! opencode run --agent globex-wiggum -m "$MODEL" "$WIGGUM_PROMPT" > "$WIGGUM_OUTPUT" 2>&1; then
+  if ! opencode run --agent globex-wiggum -m "$MODEL" --variant "$VARIANT" "$WIGGUM_PROMPT" > "$WIGGUM_OUTPUT" 2>&1; then
     print_status "⚠" "$YELLOW" "Wiggum exited with error, checking output..."
   fi
   
