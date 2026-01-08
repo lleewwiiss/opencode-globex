@@ -34,3 +34,6 @@ coverage/
 .env
 .env.local
 .env.*.local
+
+# Reference projects (local only)
+references/

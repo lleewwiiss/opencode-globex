@@ -1,10 +1,11 @@
 import type { OpencodeClient } from "@opencode-ai/sdk/v2/client"
 import type { Setter } from "solid-js"
-import { runAgentSession } from "../opencode/session.js"
+import { runAgentSession, abortSession } from "../opencode/session.js"
 import { FEATURES_PROMPT } from "../agents/prompts.js"
 import { updatePhase, getProjectDir } from "../state/persistence.js"
 import type { AppState } from "../app.js"
 import { Effect } from "effect"
+import { log } from "../util/log.js"
 
 export interface FeaturesPhaseOptions {
   client: OpencodeClient
@@ -48,7 +49,7 @@ export async function runFeaturesPhase(
 
   callbacks.onStatusMessage("Starting feature generation...")
 
-  await runAgentSession({
+  const sessionId = await runAgentSession({
     client,
     prompt,
     model,
@@ -85,4 +86,12 @@ export async function runFeaturesPhase(
       },
     },
   })
+
+  // Clean up session
+  if (sessionId) {
+    log("features", "Cleaning up session", { sessionId })
+    await abortSession(client, sessionId).catch((e) => 
+      log("features", "Session cleanup failed", { error: String(e) })
+    )
+  }
 }

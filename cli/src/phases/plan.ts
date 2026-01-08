@@ -1,10 +1,11 @@
 import type { OpencodeClient } from "@opencode-ai/sdk/v2/client"
 import type { Setter } from "solid-js"
-import { runAgentSession } from "../opencode/session.js"
+import { runAgentSession, abortSession } from "../opencode/session.js"
 import { PLAN_PROMPT } from "../agents/prompts.js"
 import { updatePhase, getProjectDir, loadState } from "../state/persistence.js"
 import type { AppState } from "../app.js"
 import { Effect } from "effect"
+import { log } from "../util/log.js"
 
 export interface PlanPhaseOptions {
   client: OpencodeClient
@@ -53,7 +54,7 @@ export async function runPlanPhase(
 
   callbacks.onStatusMessage("Starting planning agent...")
 
-  await runAgentSession({
+  const sessionId = await runAgentSession({
     client,
     prompt,
     model,
@@ -90,4 +91,12 @@ export async function runPlanPhase(
       },
     },
   })
+
+  // Clean up session
+  if (sessionId) {
+    log("plan", "Cleaning up session", { sessionId })
+    await abortSession(client, sessionId).catch((e) => 
+      log("plan", "Session cleanup failed", { error: String(e) })
+    )
+  }
 }

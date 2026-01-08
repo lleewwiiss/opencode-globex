@@ -1,6 +1,6 @@
 import type { OpencodeClient } from "@opencode-ai/sdk/v2/client"
 import type { Setter } from "solid-js"
-import { parseModel } from "../opencode/session.js"
+import { parseModel, abortSession } from "../opencode/session.js"
 import { INTERVIEW_PROMPT } from "../agents/prompts.js"
 import { updatePhase, getProjectDir } from "../state/persistence.js"
 import type { AppState } from "../app.js"
@@ -85,6 +85,13 @@ export async function runResearchInterviewPhase(
   }))
 
   if (firstResult.complete) {
+    // Clean up session
+    if (currentSessionId) {
+      log("interview", "Cleaning up session (early complete)", { sessionId: currentSessionId })
+      await abortSession(client, currentSessionId).catch((e) => 
+        log("interview", "Session cleanup failed", { error: String(e) })
+      )
+    }
     await Effect.runPromise(updatePhase(workdir, projectId, "plan"))
     return { submitAnswer: async () => true }
   }
@@ -122,6 +129,13 @@ export async function runResearchInterviewPhase(
     }))
 
     if (result.complete) {
+      // Clean up session
+      if (currentSessionId) {
+        log("interview", "Cleaning up session", { sessionId: currentSessionId })
+        await abortSession(client, currentSessionId).catch((e) => 
+          log("interview", "Session cleanup failed", { error: String(e) })
+        )
+      }
       await Effect.runPromise(updatePhase(workdir, projectId, "plan"))
       return true
     }

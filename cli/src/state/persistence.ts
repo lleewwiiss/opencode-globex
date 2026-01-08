@@ -181,3 +181,15 @@ export const getActiveProject = async (workdir: string): Promise<string | undefi
   }).pipe(Effect.provide(NodeFileSystem.layer))
   return Effect.runPromise(effect).catch(() => undefined)
 }
+
+export const clearActiveProject = async (workdir: string): Promise<void> => {
+  const effect = Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem
+    const activePath = getActiveProjectPath(workdir)
+    const exists = yield* fs.exists(activePath)
+    if (exists) {
+      yield* fs.remove(activePath)
+    }
+  }).pipe(Effect.provide(NodeFileSystem.layer))
+  return Effect.runPromise(effect).catch(() => undefined)
+}

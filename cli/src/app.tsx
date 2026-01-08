@@ -169,6 +169,7 @@ export async function startApp(
       gatherStats: false,
       exitOnCtrlC: false,
       useKittyKeyboard: {},
+      useMouse: false,
     }
   )
 
