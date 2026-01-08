@@ -24,17 +24,61 @@ export function createLoopController(ctx: LoopContext): LoopController {
   return {
     async start(maxIterations = 50): Promise<void> {
       const state = await getInitialState(ctx.workdir)
-      const updatedState: LoopState = {
+      let currentState: LoopState = {
         ...state,
         status: "running",
         totalIterations: maxIterations,
         startedAt: new Date().toISOString(),
         pausedAt: undefined
       }
-      await saveLoopStateAsync(ctx.workdir, updatedState)
+      await saveLoopStateAsync(ctx.workdir, currentState)
+      
+      // Main loop execution
+      while (currentState.status === "running" && currentState.iteration < maxIterations) {
+        try {
+          currentState = await runIteration(ctx, currentState)
+          // Save state after each iteration
+          await saveLoopStateAsync(ctx.workdir, currentState)
+          
+          if (currentState.status === "paused") {
+            await ctx.showToast("Loop paused", "info", "Globex")
+            break
+          }
+          
+          if (currentState.status === "complete") {
+            await ctx.showToast("Loop completed", "success", "Globex")
+            break
+          }
+        } catch (error) {
+          await ctx.log(`Iteration error: ${error}`, "error")
+          currentState = {
+            ...currentState,
+            status: "idle"
+          }
+          await saveLoopStateAsync(ctx.workdir, currentState)
+          throw error
+        }
+      }
+      
+      if (currentState.iteration >= maxIterations) {
+        currentState = { ...currentState, status: "complete" }
+        await saveLoopStateAsync(ctx.workdir, currentState)
+        await ctx.showToast("Maximum iterations reached", "info", "Globex")
+      }
     },
 
     async pause(): Promise<void> {
+      // Create pause signal file
+      const pauseFile = path.join(ctx.workdir, ".globex-pause")
+      try {
+        await fs.writeFile(pauseFile, new Date().toISOString())
+        await ctx.showToast("Pause signal created", "info", "Globex")
+      } catch (error) {
+        await ctx.log(`Failed to create pause file: ${error}`, "error")
+        throw error
+      }
+      
+      // Update state if currently running
       const state = await loadLoopStateAsync(ctx.workdir)
       if (state && state.status === "running") {
         const updatedState: LoopState = {
@@ -47,19 +91,54 @@ export function createLoopController(ctx: LoopContext): LoopController {
     },
 
     async resume(): Promise<void> {
+      // Remove pause signal file
+      const pauseFile = path.join(ctx.workdir, ".globex-pause")
+      try {
+        await fs.unlink(pauseFile)
+        await ctx.showToast("Pause signal removed", "info", "Globex")
+      } catch (error) {
+        // File may not exist, which is fine
+        await ctx.log(`Pause file not found (already running?): ${error}`, "debug")
+      }
+      
+      // Resume execution by calling start
       const state = await loadLoopStateAsync(ctx.workdir)
       if (state && state.status === "paused") {
-        const updatedState: LoopState = {
+        const resumeState: LoopState = {
           ...state,
           status: "running",
           pausedAt: undefined
         }
-        await saveLoopStateAsync(ctx.workdir, updatedState)
+        await saveLoopStateAsync(ctx.workdir, resumeState)
+        
+        // Continue with remaining iterations
+        const remainingIterations = state.totalIterations ? 
+          Math.max(0, state.totalIterations - state.iteration) : 50
+        await this.start(remainingIterations)
       }
     },
 
     async status(): Promise<LoopStatus> {
       const state = await loadLoopStateAsync(ctx.workdir)
+      
+      // Check for pause signal file to sync status
+      const pauseFile = path.join(ctx.workdir, ".globex-pause")
+      try {
+        await fs.access(pauseFile)
+        if (state && state.status === "running") {
+          // Update state to reflect pause signal
+          const pausedState: LoopState = {
+            ...state,
+            status: "paused",
+            pausedAt: new Date().toISOString()
+          }
+          await saveLoopStateAsync(ctx.workdir, pausedState)
+          return "paused"
+        }
+      } catch {
+        // No pause file
+      }
+      
       return state?.status ?? "idle"
     }
   }
