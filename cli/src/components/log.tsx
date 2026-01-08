@@ -1,0 +1,142 @@
+/** @jsxImportSource @opentui/solid */
+import { For, Match, Switch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
+import { colors, TOOL_ICONS } from "./colors"
+import { formatDuration } from "../util/time"
+import type { ToolEvent } from "../state/types"
+
+const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+const DEFAULT_ICON = "\u2699"
+
+export function getEventKey(event: ToolEvent): string {
+  return `${event.iteration}-${event.timestamp}`
+}
+
+function getToolColor(icon: string | undefined): string {
+  if (!icon) return colors.fg
+
+  if (icon === TOOL_ICONS.read) return colors.blue
+  if (icon === TOOL_ICONS.write || icon === TOOL_ICONS.edit) return colors.green
+  if (icon === TOOL_ICONS.glob || icon === TOOL_ICONS.grep) return colors.yellow
+  if (icon === TOOL_ICONS.task) return colors.purple
+  if (
+    icon === TOOL_ICONS.webfetch ||
+    icon === TOOL_ICONS.websearch ||
+    icon === TOOL_ICONS.codesearch
+  )
+    return colors.cyan
+  if (icon === TOOL_ICONS.bash) return colors.fgMuted
+  return colors.fg
+}
+
+export type LogProps = {
+  events: ToolEvent[]
+  isIdle: boolean
+}
+
+function Spinner(props: { isIdle: boolean }) {
+  const [frame, setFrame] = createSignal(0)
+  let intervalRef: ReturnType<typeof setInterval> | null = null
+
+  createEffect(() => {
+    if (props.isIdle) {
+      if (intervalRef) {
+        clearInterval(intervalRef)
+        intervalRef = null
+      }
+    } else {
+      if (!intervalRef) {
+        intervalRef = setInterval(() => {
+          setFrame((f) => (f + 1) % SPINNER_FRAMES.length)
+        }, 120)
+      }
+    }
+  })
+
+  onCleanup(() => {
+    if (intervalRef) {
+      clearInterval(intervalRef)
+      intervalRef = null
+    }
+  })
+
+  return (
+    <box width="100%" flexDirection="row" paddingTop={1}>
+      <text fg={colors.cyan}>{SPINNER_FRAMES[frame()]}</text>
+      <text fg={colors.fgMuted}> looping...</text>
+    </box>
+  )
+}
+
+function SeparatorEvent(props: { event: ToolEvent }) {
+  const durationText = createMemo(() =>
+    props.event.duration !== undefined
+      ? formatDuration(props.event.duration)
+      : "running"
+  )
+  const commitCount = createMemo(() => props.event.commitCount ?? 0)
+  const commitText = createMemo(() =>
+    `${commitCount()} commit${commitCount() !== 1 ? "s" : ""}`
+  )
+
+  return (
+    <box width="100%" paddingTop={1} paddingBottom={1} flexDirection="row">
+      <text fg={colors.fgMuted}>{"── "}</text>
+      <text fg={colors.fg}>iteration {props.event.iteration}</text>
+      <text fg={colors.fgMuted}>{" ────────────── "}</text>
+      <text fg={colors.fg}>{durationText()}</text>
+      <text fg={colors.fgMuted}>{" · "}</text>
+      <text fg={colors.fg}>{commitText()}</text>
+      <text fg={colors.fgMuted}>{" ──"}</text>
+    </box>
+  )
+}
+
+function ToolEventItem(props: { event: ToolEvent }) {
+  const icon = createMemo(() => props.event.icon || DEFAULT_ICON)
+  const iconColor = createMemo(() => getToolColor(props.event.icon))
+
+  return (
+    <box width="100%" flexDirection="row">
+      <text fg={iconColor()}>{icon()}</text>
+      <text fg={colors.fg}> {props.event.text}</text>
+    </box>
+  )
+}
+
+export function Log(props: LogProps) {
+  return (
+    <scrollbox
+      flexGrow={1}
+      stickyScroll={true}
+      stickyStart="bottom"
+      rootOptions={{
+        backgroundColor: colors.bg,
+      }}
+      viewportOptions={{
+        backgroundColor: colors.bgDark,
+      }}
+      verticalScrollbarOptions={{
+        visible: true,
+        trackOptions: {
+          backgroundColor: colors.border,
+        },
+      }}
+    >
+      <For each={props.events}>
+        {(event) => (
+          <Switch>
+            <Match when={event.type === "spinner"}>
+              <Spinner isIdle={props.isIdle} />
+            </Match>
+            <Match when={event.type === "separator"}>
+              <SeparatorEvent event={event} />
+            </Match>
+            <Match when={event.type === "tool"}>
+              <ToolEventItem event={event} />
+            </Match>
+          </Switch>
+        )}
+      </For>
+    </scrollbox>
+  )
+}

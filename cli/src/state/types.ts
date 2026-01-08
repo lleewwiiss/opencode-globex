@@ -80,6 +80,16 @@ export const PHASE_TRANSITIONS: Record<Phase, Phase[]> = {
 
 export type LoopStatus = "running" | "paused" | "complete" | "error"
 
+export type ToolEvent = {
+  iteration: number
+  type: "tool" | "separator" | "spinner"
+  icon?: string
+  text: string
+  timestamp: number
+  duration?: number
+  commitCount?: number
+}
+
 export interface LoopState {
   status: LoopStatus
   iteration: number
