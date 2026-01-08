@@ -8,7 +8,7 @@ export type Phase =
   | "execute"
   | "complete"
 
-export type ApprovalStatus = "pending" | "approved" | "rejected"
+export type ApprovalStatus = "pending" | "approved" | "approved_with_risks" | "rejected"
 
 export interface Approval {
   status: ApprovalStatus
