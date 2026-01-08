@@ -18,6 +18,7 @@ export interface TextInputProps {
  * Supports both single-line (input) and multi-line (textarea) modes.
  */
 export function TextInput(props: TextInputProps) {
+  // eslint-disable-next-line no-unassigned-vars -- Solid.js ref pattern: assigned via ref prop
   let textareaRef: TextareaRenderable | undefined
 
   const handleTextareaSubmit = () => {

@@ -2,7 +2,8 @@ import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import type { Setter } from "solid-js"
 import { startApp, createInitialAppState, type AppState, type AppCallbacks } from "./app.js"
 import { getOrCreateOpencodeServer } from "./opencode/server.js"
-import { loadState, checkStateExists, getProjectDir, createState, saveState, sanitizeProjectId, setActiveProject, getActiveProject } from "./state/persistence.js"
+import { loadState, checkStateExists, createState, saveState, sanitizeProjectId, setActiveProject, getActiveProject, updatePhase, clearActiveProject } from "./state/persistence.js"
+import { readFeatures, readFeaturesWithSummary } from "./state/features-persistence.js"
 import { loadConfig } from "./config.js"
 import { runRalphLoop, type RalphLoopCallbacks } from "./loop/ralph.js"
 import { createSignal, removeSignal } from "./loop/signals.js"
@@ -14,12 +15,7 @@ import { runFeaturesPhase } from "./phases/features.js"
 import { getProgressStats, getFeatureCategories } from "./features/manager.js"
 import { log } from "./util/log.js"
 import type { Phase, ToolEvent } from "./state/types.js"
-import type { Feature } from "./state/schema.js"
 import { Effect } from "effect"
-import { FileSystem } from "@effect/platform"
-import { NodeFileSystem } from "@effect/platform-node"
-
-// Note: Effect imports used by readFeaturesJson
 
 const DEFAULT_MODEL = "anthropic/claude-opus-4-5"
 const DEFAULT_VARIANT = "max"
@@ -30,26 +26,11 @@ export interface GlobexCliOptions {
   signal?: AbortSignal
 }
 
-interface FeaturesData {
-  features: Feature[]
-  summary: string
-}
-
-async function readFeaturesJson(workdir: string, projectId: string): Promise<FeaturesData> {
-  const effect = Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem
-    const path = `${getProjectDir(workdir, projectId)}/features.json`
-    const exists = yield* fs.exists(path)
-    if (!exists) return { features: [], summary: "" }
-    const content = yield* fs.readFileString(path)
-    const parsed = JSON.parse(content) as { features: Feature[], summary?: string }
-    return { features: parsed.features, summary: parsed.summary ?? "" }
-  }).pipe(Effect.provide(NodeFileSystem.layer))
-
-  return Effect.runPromise(effect).catch(() => ({ features: [], summary: "" }))
-}
-
-function createLoopCallbacks(setState: Setter<AppState>): RalphLoopCallbacks {
+function createLoopCallbacks(
+  setState: Setter<AppState>,
+  workdir: string,
+  projectId: string
+): RalphLoopCallbacks {
   return {
     onIterationStart: (iteration, featureId) => {
       const separator: ToolEvent = {
@@ -151,7 +132,7 @@ function createLoopCallbacks(setState: Setter<AppState>): RalphLoopCallbacks {
         execute: { ...prev.execute, paused: false },
       }))
     },
-    onComplete: (completedCount, totalCount) => {
+    onComplete: async (completedCount, totalCount) => {
       const event: ToolEvent = {
         iteration: 0,
         type: "separator",
@@ -171,6 +152,15 @@ function createLoopCallbacks(setState: Setter<AppState>): RalphLoopCallbacks {
           },
         }
       })
+
+      // Update phase to complete and clear active project
+      try {
+        await Effect.runPromise(updatePhase(workdir, projectId, "complete"))
+        await clearActiveProject(workdir)
+        log("ralph", "Project marked complete and active project cleared", { projectId })
+      } catch (err) {
+        log("ralph", "Failed to update phase to complete", { error: String(err) })
+      }
     },
     onError: () => {
       // Errors are logged to debug.log - no UI event needed
@@ -199,7 +189,7 @@ interface PhaseContext {
 }
 
 const runExecutePhase: PhaseRunner = async (ctx) => {
-  const callbacks = createLoopCallbacks(ctx.setState)
+  const callbacks = createLoopCallbacks(ctx.setState, ctx.workdir, ctx.projectId)
 
   await runRalphLoop(
     {
@@ -430,7 +420,7 @@ async function transitionToFeatures(
       },
       onComplete: async () => {
         // Load features and show confirm screen
-        const { features, summary } = await readFeaturesJson(workdir, projectId)
+        const { features, summary } = await readFeaturesWithSummary(workdir, projectId)
         const categories = getFeatureCategories(features)
         
         setState((prev) => ({
@@ -465,7 +455,7 @@ async function transitionToConfirm(
   projectId: string,
   projectName: string
 ): Promise<void> {
-  const { features, summary } = await readFeaturesJson(workdir, projectId)
+  const { features, summary } = await readFeaturesWithSummary(workdir, projectId)
   const categories = getFeatureCategories(features)
   
   setState((prev) => ({
@@ -491,7 +481,7 @@ async function transitionToExecute(
 ): Promise<void> {
   const state = await loadState(workdir, projectId)
   const phase = state.currentPhase
-  const { features } = await readFeaturesJson(workdir, projectId)
+  const features = await readFeatures(workdir, projectId)
   const progress = getProgressStats(features)
 
   setState((prev) => ({
@@ -684,7 +674,7 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
         interviewSubmitAnswer = submitAnswer
       } else if (existingState.currentPhase === "features") {
         // Features already generated, check if features.json exists
-        const { features } = await readFeaturesJson(workdir, activeProjectId)
+        const features = await readFeatures(workdir, activeProjectId)
         if (features.length > 0) {
           // Show confirm screen
           await transitionToConfirm(setState, workdir, activeProjectId, existingState.projectName)
@@ -721,6 +711,7 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
   } finally {
     server?.close()
     await cleanup()
+    process.exit(0)
   }
 }
 

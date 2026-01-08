@@ -2,14 +2,11 @@ import type { OpencodeClient } from "@opencode-ai/sdk/v2/client"
 import type { Feature } from "../state/schema.js"
 import { getNextFeature, updateFeature } from "../features/manager.js"
 import { checkSignal, clearSignals } from "./signals.js"
-import { parseModel } from "../opencode/session.js"
-import { getProjectDir } from "../state/persistence.js"
+import { parseModel, abortSession } from "../opencode/session.js"
 import { commitChanges, getHeadHash, getCommitsSince } from "../git.js"
+import { readFeatures, writeFeatures, readRejectionInfo } from "../state/features-persistence.js"
 import { RALPH_PROMPT, WIGGUM_PROMPT } from "../agents/prompts.js"
 import { log } from "../util/log.js"
-import { Effect } from "effect"
-import { FileSystem } from "@effect/platform"
-import { NodeFileSystem } from "@effect/platform-node"
 
 const MAX_ATTEMPTS = 3
 const PAUSE_CHECK_INTERVAL_MS = 1000
@@ -43,51 +40,6 @@ export interface RalphLoopResult {
   completedFeatures: string[]
   blockedFeatures: string[]
   error?: string
-}
-
-interface RejectionInfo {
-  featureId: string
-  reasons: string[]
-}
-
-async function readFeaturesJson(workdir: string, projectId: string): Promise<Feature[]> {
-  const effect = Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem
-    const path = `${getProjectDir(workdir, projectId)}/features.json`
-    const content = yield* fs.readFileString(path)
-    const parsed = JSON.parse(content) as { features: Feature[] }
-    return parsed.features
-  }).pipe(Effect.provide(NodeFileSystem.layer))
-
-  return Effect.runPromise(effect)
-}
-
-async function writeFeaturesJson(
-  workdir: string,
-  projectId: string,
-  features: Feature[]
-): Promise<void> {
-  const effect = Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem
-    const path = `${getProjectDir(workdir, projectId)}/features.json`
-    const content = JSON.stringify({ features }, null, 2)
-    yield* fs.writeFileString(path, content)
-  }).pipe(Effect.provide(NodeFileSystem.layer))
-
-  return Effect.runPromise(effect)
-}
-
-async function readRejectionInfo(workdir: string): Promise<RejectionInfo | null> {
-  const effect = Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem
-    const path = `${workdir}/.globex-rejected`
-    const exists = yield* fs.exists(path)
-    if (!exists) return null
-    const content = yield* fs.readFileString(path)
-    return JSON.parse(content) as RejectionInfo
-  }).pipe(Effect.provide(NodeFileSystem.layer))
-
-  return Effect.runPromise(effect).catch(() => null)
 }
 
 async function checkPaused(workdir: string): Promise<boolean> {
@@ -190,50 +142,62 @@ async function runAgentWithEvents(
   const events = await client.event.subscribe()
 
   let promptSent = false
+  let success = false
 
-  for await (const event of events.stream) {
-    if (signal?.aborted) {
-      log("ralph", "Signal aborted during event loop")
-      return false
-    }
-
-    // Send prompt when connected
-    if (event.type === "server.connected" && !promptSent) {
-      promptSent = true
-      log("ralph", "server.connected - sending prompt")
-
-      client.session.prompt({
-        sessionID: sessionId,
-        model: { providerID, modelID },
-        parts: [{ type: "text", text: prompt }],
-      }).catch((e) => log("ralph", "Prompt error", { error: String(e) }))
-
-      continue
-    }
-
-    // Session idle - agent finished
-    if (event.type === "session.idle" && event.properties.sessionID === sessionId) {
-      log("ralph", "session.idle received - agent finished")
-      return true
-    }
-
-    // Session error
-    if (event.type === "session.error") {
-      const props = event.properties
-      if (props.sessionID !== sessionId || !props.error) continue
-
-      let errorMessage = String(props.error.name)
-      if ("data" in props.error && props.error.data && "message" in props.error.data) {
-        errorMessage = String(props.error.data.message)
+  try {
+    for await (const event of events.stream) {
+      if (signal?.aborted) {
+        log("ralph", "Signal aborted during event loop")
+        return false
       }
 
-      log("ralph", "session.error received", { errorMessage })
-      throw new Error(errorMessage)
+      // Send prompt when connected
+      if (event.type === "server.connected" && !promptSent) {
+        promptSent = true
+        log("ralph", "server.connected - sending prompt")
+
+        client.session.prompt({
+          sessionID: sessionId,
+          model: { providerID, modelID },
+          parts: [{ type: "text", text: prompt }],
+        }).catch((e) => log("ralph", "Prompt error", { error: String(e) }))
+
+        continue
+      }
+
+      // Session idle - agent finished
+      if (event.type === "session.idle" && event.properties.sessionID === sessionId) {
+        log("ralph", "session.idle received - agent finished")
+        success = true
+        break
+      }
+
+      // Session error
+      if (event.type === "session.error") {
+        const props = event.properties
+        if (props.sessionID !== sessionId || !props.error) continue
+
+        let errorMessage = String(props.error.name)
+        if ("data" in props.error && props.error.data && "message" in props.error.data) {
+          errorMessage = String(props.error.data.message)
+        }
+
+        log("ralph", "session.error received", { errorMessage })
+        throw new Error(errorMessage)
+      }
     }
+  } finally {
+    // Clean up session
+    log("ralph", "Cleaning up session", { sessionId })
+    await abortSession(client, sessionId).catch((e) => 
+      log("ralph", "Session cleanup failed", { error: String(e) })
+    )
   }
 
-  log("ralph", "Event loop exited unexpectedly")
-  return false
+  if (!success) {
+    log("ralph", "Event loop exited unexpectedly")
+  }
+  return success
 }
 
 export async function runRalphLoop(
@@ -259,7 +223,7 @@ export async function runRalphLoop(
 
       // Load current features
       log("ralph", "Loading features...")
-      const features = await readFeaturesJson(workdir, projectId)
+      const features = await readFeatures(workdir, projectId)
       const nextFeature = getNextFeature(features)
 
       // No more features - we're done
@@ -292,7 +256,7 @@ export async function runRalphLoop(
           blocked: true,
           blockedReason: reason,
         })
-        await writeFeaturesJson(workdir, projectId, updatedFeatures)
+        await writeFeatures(workdir, projectId, updatedFeatures)
         continue
       }
 
@@ -360,7 +324,7 @@ export async function runRalphLoop(
           passes: true,
           lastRejectionFeedback: undefined,
         })
-        await writeFeaturesJson(workdir, projectId, updatedFeatures)
+        await writeFeatures(workdir, projectId, updatedFeatures)
         completedFeatures.push(nextFeature.id)
         callbacks.onFeatureComplete(nextFeature.id)
       } else if (rejected) {
@@ -375,7 +339,7 @@ export async function runRalphLoop(
           lastRejectionFeedback: reasons,
         })
 
-        await writeFeaturesJson(workdir, projectId, updatedFeatures)
+        await writeFeatures(workdir, projectId, updatedFeatures)
         callbacks.onFeatureRetry(nextFeature.id, newAttempts, reasons.join("; "))
       } else {
         callbacks.onError(

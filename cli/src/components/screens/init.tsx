@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { createSignal, createMemo, createEffect, onCleanup, Show, For } from "solid-js"
-import { useKeyboard } from "@opentui/solid"
+import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import type { SelectOption } from "@opentui/core"
 import { colors } from "../colors.js"
 import { SimpleHeader } from "../simple-header.js"
@@ -22,119 +22,68 @@ export interface InitScreenProps {
 
 type InitStep = "select" | "input"
 
-// ASCII art frames for rotating orbital ring around globe
-// Each frame: 9 lines tall, ~27 chars wide, diamond center, orbital ring rotates
-const LOGO_FRAMES: string[][] = [
-  // Frame 0: Ring at top
-  [
-    "        ╭───────────╮        ",
-    "    ╭───┤  ═══════  ├───╮   ",
-    "   │    ╰───────────╯    │  ",
-    "   │         ◈           │  ",
-    "   │                     │  ",
-    "   ╰──────────────────────╯ ",
-    "                            ",
-    "    GLOBEX  CORPORATION     ",
-    "                            ",
-  ],
-  // Frame 1: Ring at top-right
-  [
-    "                     ╱──╮   ",
-    "    ╭───────────╮ ══╱   │   ",
-    "   │            │      ╱    ",
-    "   │      ◈     │    ╱      ",
-    "   │            ╰──╱        ",
-    "   ╰──────────────╯         ",
-    "                            ",
-    "    GLOBEX  CORPORATION     ",
-    "                            ",
-  ],
-  // Frame 2: Ring at right
-  [
-    "                       │    ",
-    "    ╭──────────────╮   │    ",
-    "   │               ║   │    ",
-    "   │      ◈        ║ ══╡    ",
-    "   │               ║   │    ",
-    "   ╰──────────────╯    │    ",
-    "                       │    ",
-    "    GLOBEX  CORPORATION     ",
-    "                            ",
-  ],
-  // Frame 3: Ring at bottom-right
-  [
-    "                            ",
-    "    ╭──────────────╮        ",
-    "   │            ╭──╲        ",
-    "   │      ◈     │    ╲      ",
-    "   │            │      ╲    ",
-    "   ╰───────────╯  ══╲   │   ",
-    "                     ╲──╯   ",
-    "    GLOBEX  CORPORATION     ",
-    "                            ",
-  ],
-  // Frame 4: Ring at bottom
-  [
-    "                            ",
-    "    ╭──────────────────────╮",
-    "   │                     │  ",
-    "   │         ◈           │  ",
-    "   │    ╭───────────╮    │  ",
-    "   ╰───┤  ═══════  ├───╯   ",
-    "        ╰───────────╯       ",
-    "    GLOBEX  CORPORATION     ",
-    "                            ",
-  ],
-  // Frame 5: Ring at bottom-left
-  [
-    "                            ",
-    "        ╭──────────────╮    ",
-    "        ╱──╮            │   ",
-    "      ╱    │     ◈      │   ",
-    "    ╱      │            │   ",
-    "   │   ╱══  ╰───────────╯   ",
-    "   ╰──╱                     ",
-    "    GLOBEX  CORPORATION     ",
-    "                            ",
-  ],
-  // Frame 6: Ring at left
-  [
-    "    │                       ",
-    "    │   ╭──────────────╮    ",
-    "    │   ║               │   ",
-    "    ╞══ ║        ◈      │   ",
-    "    │   ║               │   ",
-    "    │    ╰──────────────╯   ",
-    "    │                       ",
-    "    GLOBEX  CORPORATION     ",
-    "                            ",
-  ],
-  // Frame 7: Ring at top-left
-  [
-    "   ╭──╲                     ",
-    "   │   ╲══  ╭───────────╮   ",
-    "    ╲      │            │   ",
-    "      ╲    │     ◈      │   ",
-    "        ╲──╯            │   ",
-    "         ╰──────────────╯   ",
-    "                            ",
-    "    GLOBEX  CORPORATION     ",
-    "                            ",
-  ],
-]
+import { generateGlobeFrames, computeGlobeDimensions, type GlobeCell } from "../globe.js"
+
+// Helper to render a line of globe cells with individual colors
+function GlobeLine(props: { cells: GlobeCell[] }) {
+  return (
+    <box flexDirection="row">
+      <For each={props.cells}>
+        {(cell) => <text fg={cell.color}>{cell.char}</text>}
+      </For>
+    </box>
+  )
+}
+
+// Reserved space: header ~2, footer ~2, title ~2, margins ~2
+const RESERVED_VERTICAL = 8
+const RESERVED_HORIZONTAL = 4
+// Extra space needed for menu in vertical layout
+const MENU_HEIGHT = 10
 
 export function InitScreen(props: InitScreenProps) {
   const hasActiveProject = createMemo(() => !!props.activeProject)
   const [step, setStep] = createSignal<InitStep>(hasActiveProject() ? "select" : "input")
   const [selectedIndex, setSelectedIndex] = createSignal(0)
   const [description, setDescription] = createSignal("")
-  const [logoFrame, setLogoFrame] = createSignal(0)
+  const [globeFrame, setGlobeFrame] = createSignal(0)
+  const [globeFrames, setGlobeFrames] = createSignal<GlobeCell[][][]>([])
+  const terminalDimensions = useTerminalDimensions()
 
-  // Animation loop for logo frames (cycles at 100ms)
+  // Compute globe dimensions and layout mode based on terminal size
+  const globeDimensions = createMemo(() => {
+    const dims = terminalDimensions()
+    // In compact mode, globe shares horizontal space, so give it less reserved
+    const verticalReserved = RESERVED_VERTICAL
+    return computeGlobeDimensions(dims.width, dims.height, verticalReserved, RESERVED_HORIZONTAL)
+  })
+
+  // Compact layout when globe + menu won't fit vertically
+  const isCompact = createMemo(() => {
+    const dims = terminalDimensions()
+    const globeDims = globeDimensions()
+    if (!globeDims) return true // No globe = definitely compact
+    const neededHeight = RESERVED_VERTICAL + globeDims.height + MENU_HEIGHT
+    return dims.height < neededHeight
+  })
+
+  // Regenerate globe frames when dimensions change
   createEffect(() => {
+    const dims = globeDimensions()
+    if (dims) {
+      setGlobeFrames(generateGlobeFrames(48, dims.width, dims.height))
+    } else {
+      setGlobeFrames([])
+    }
+  })
+
+  // Animation loop for globe rotation (80ms per frame for smooth spin)
+  createEffect(() => {
+    const frames = globeFrames()
+    if (frames.length === 0) return
     const interval = setInterval(() => {
-      setLogoFrame((f) => (f + 1) % Math.max(1, LOGO_FRAMES.length))
-    }, 100)
+      setGlobeFrame((f) => (f + 1) % frames.length)
+    }, 80)
     onCleanup(() => clearInterval(interval))
   })
 
@@ -224,79 +173,81 @@ export function InitScreen(props: InitScreenProps) {
 
       <box
         flexGrow={1}
-        flexDirection="column"
+        flexDirection={isCompact() ? "row" : "column"}
         alignItems="center"
         justifyContent="center"
         paddingLeft={2}
         paddingRight={2}
+        gap={isCompact() ? 4 : 0}
       >
-        {/* Animated Logo */}
-        <box flexDirection="column" alignItems="center" marginBottom={2}>
-          <For each={LOGO_FRAMES[logoFrame()]}>
-            {(line) => {
-              // Diamond icon (◈) gets cyan, GLOBEX CORPORATION gets fg, rest purple
-              if (line.includes("◈")) {
-                const parts = line.split("◈")
-                return (
-                  <text>
-                    <text fg={colors.purple}>{parts[0]}</text>
-                    <text fg={colors.cyan}>◈</text>
-                    <text fg={colors.purple}>{parts[1]}</text>
-                  </text>
-                )
-              }
-              if (line.includes("GLOBEX")) {
-                return <text fg={colors.fg}>{line}</text>
-              }
-              return <text fg={colors.purple}>{line}</text>
-            }}
-          </For>
+        {/* Animated Globe Logo */}
+        <Show when={globeFrames().length > 0}>
+          <box flexDirection="column" alignItems="center" marginBottom={isCompact() ? 0 : 2}>
+            <box flexDirection="column">
+              <For each={globeFrames()[globeFrame()] ?? []}>
+                {(row) => <GlobeLine cells={row} />}
+              </For>
+            </box>
+            <text fg={colors.fg} marginTop={1}>GLOBEX CORPORATION</text>
+            <text fg={colors.fgDark}>Ralph builds, Wiggum approves</text>
+          </box>
+        </Show>
+        {/* Fallback when globe is too small */}
+        <Show when={globeFrames().length === 0}>
+          <box flexDirection="column" alignItems="center" marginBottom={isCompact() ? 0 : 2}>
+            <text fg={colors.green}>GLOBEX</text>
+            <text fg={colors.fg}>CORPORATION</text>
+            <text fg={colors.fgDark}>Ralph builds, Wiggum approves</text>
+          </box>
+        </Show>
+
+        {/* Menu Section */}
+        <box flexDirection="column" alignItems={isCompact() ? "flex-start" : "center"} justifyContent="center">
+          {/* Select Step */}
+          <Show when={step() === "select" && hasActiveProject()}>
+            <box flexDirection="column" width={50} marginTop={isCompact() ? 0 : 1}>
+              <text fg={colors.fgMuted} marginBottom={1}>
+                What would you like to do?
+              </text>
+
+              <select
+                options={selectOptions()}
+                focused={true}
+                height={6}
+                width={50}
+                onChange={(index) => setSelectedIndex(index)}
+                onSelect={(index) => {
+                  const selected = selectOptions()[index]
+                  if (selected?.value === "continue" && props.activeProject) {
+                    props.onContinue(props.activeProject.id)
+                  } else if (selected?.value === "new") {
+                    setStep("input")
+                  }
+                }}
+              />
+            </box>
+          </Show>
+
+          {/* Input Step */}
+          <Show when={step() === "input"}>
+            <box flexDirection="column" width={60} marginTop={isCompact() ? 0 : 1}>
+              <text fg={colors.fgMuted} marginBottom={1}>
+                Describe your project:
+              </text>
+
+              <TextInput
+                placeholder="Add authentication using JWT tokens..."
+                value={description()}
+                onInput={(value) => setDescription(value)}
+                onSubmit={handleInputSubmit}
+              />
+
+              <text fg={colors.fgDark} marginTop={1}>
+                Be specific about what you want to build.
+              </text>
+            </box>
+          </Show>
         </box>
-
-        {/* Select Step */}
-        <Show when={step() === "select" && hasActiveProject()}>
-          <box flexDirection="column" width={50} marginTop={1}>
-            <text fg={colors.fgMuted} marginBottom={1}>
-              What would you like to do?
-            </text>
-
-            <select
-              options={selectOptions()}
-              focused={true}
-              height={6}
-              width={50}
-              onChange={(index) => setSelectedIndex(index)}
-              onSelect={(index) => {
-                const selected = selectOptions()[index]
-                if (selected?.value === "continue" && props.activeProject) {
-                  props.onContinue(props.activeProject.id)
-                } else if (selected?.value === "new") {
-                  setStep("input")
-                }
-              }}
-            />
-          </box>
-        </Show>
-
-        {/* Input Step */}
-        <Show when={step() === "input"}>
-          <box flexDirection="column" width={60} marginTop={1}>
-            <text fg={colors.fgMuted} marginBottom={1}>
-              Describe your project:
-            </text>
-
-            <TextInput
-              placeholder="Add authentication using JWT tokens..."
-              value={description()}
-              onInput={(value) => setDescription(value)}
-              onSubmit={handleInputSubmit}
-            />
-
-            <text fg={colors.fgDark} marginTop={1}>
-              Be specific about what you want to build.
-            </text>
-          </box>
-        </Show>
       </box>
 
       <SimpleFooter hints={keyHints()} />
