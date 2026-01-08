@@ -11,6 +11,7 @@ export interface FeatureUpdate {
   blocked?: boolean
   blockedReason?: string
   notes?: string
+  attempts?: number
 }
 
 export function getNextFeature(features: Feature[]): Feature | null {
@@ -38,6 +39,7 @@ export function updateFeature(
       ...(update.blocked !== undefined && { blocked: update.blocked }),
       ...(update.blockedReason !== undefined && { blockedReason: update.blockedReason }),
       ...(update.notes !== undefined && { notes: update.notes }),
+      ...(update.attempts !== undefined && { attempts: update.attempts }),
     }
   })
 }
