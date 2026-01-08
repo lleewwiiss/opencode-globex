@@ -12,6 +12,7 @@ export interface FeatureUpdate {
   blockedReason?: string
   notes?: string
   attempts?: number
+  lastRejectionFeedback?: string[] | undefined
 }
 
 export function getNextFeature(features: Feature[]): Feature | null {
@@ -33,14 +34,20 @@ export function updateFeature(
 ): Feature[] {
   return features.map(f => {
     if (f.id !== id) return f
-    return {
+    const updated = {
       ...f,
       ...(update.passes !== undefined && { passes: update.passes }),
       ...(update.blocked !== undefined && { blocked: update.blocked }),
       ...(update.blockedReason !== undefined && { blockedReason: update.blockedReason }),
       ...(update.notes !== undefined && { notes: update.notes }),
       ...(update.attempts !== undefined && { attempts: update.attempts }),
+      ...(update.lastRejectionFeedback !== undefined && { lastRejectionFeedback: update.lastRejectionFeedback }),
     }
+    // Remove lastRejectionFeedback if explicitly set to undefined
+    if (update.lastRejectionFeedback === undefined && "lastRejectionFeedback" in update) {
+      delete (updated as Record<string, unknown>).lastRejectionFeedback
+    }
+    return updated
   })
 }
 
@@ -52,4 +59,20 @@ export function getProgressStats(features: Feature[]): ProgressStats {
     remaining: total - completed,
     total,
   }
+}
+
+export interface CategoryCount {
+  category: string
+  count: number
+}
+
+export function getFeatureCategories(features: Feature[]): CategoryCount[] {
+  const counts = new Map<string, number>()
+  for (const f of features) {
+    const cat = f.category || "other"
+    counts.set(cat, (counts.get(cat) || 0) + 1)
+  }
+  return Array.from(counts.entries())
+    .map(([category, count]) => ({ category, count }))
+    .sort((a, b) => b.count - a.count)
 }

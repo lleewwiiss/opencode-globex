@@ -2,16 +2,16 @@ import type { OpencodeClient } from "@opencode-ai/sdk/v2/client"
 import type { Feature } from "../state/schema.js"
 import { getNextFeature, updateFeature } from "../features/manager.js"
 import { checkSignal, clearSignals } from "./signals.js"
-import { spawnAgentSession, waitForSessionIdle } from "../opencode/session.js"
+import { parseModel } from "../opencode/session.js"
 import { getProjectDir } from "../state/persistence.js"
 import { commitChanges } from "../git.js"
 import { RALPH_PROMPT, WIGGUM_PROMPT } from "../agents/prompts.js"
+import { log } from "../util/log.js"
 import { Effect } from "effect"
 import { FileSystem } from "@effect/platform"
 import { NodeFileSystem } from "@effect/platform-node"
 
 const MAX_ATTEMPTS = 3
-const SESSION_TIMEOUT_MS = 600_000 // 10 minutes
 const PAUSE_CHECK_INTERVAL_MS = 1000
 
 export interface RalphLoopContext {
@@ -23,6 +23,7 @@ export interface RalphLoopContext {
 
 export interface RalphLoopCallbacks {
   onIterationStart: (iteration: number, featureId: string) => void
+  onIterationComplete: (iteration: number) => void
   onRalphStart: (featureId: string) => void
   onRalphComplete: (featureId: string) => void
   onWiggumStart: (featureId: string) => void
@@ -103,6 +104,7 @@ async function waitWhilePaused(
     if (signal?.aborted) return
 
     if (!notifiedPause) {
+      log("ralph", "Paused")
       callbacks.onPaused()
       notifiedPause = true
     }
@@ -111,6 +113,7 @@ async function waitWhilePaused(
   }
 
   if (notifiedPause) {
+    log("ralph", "Resumed")
     callbacks.onResumed()
   }
 }
@@ -166,6 +169,72 @@ function buildWiggumPrompt(feature: Feature): string {
   return prompt
 }
 
+async function runAgentWithEvents(
+  client: OpencodeClient,
+  prompt: string,
+  model: string,
+  signal?: AbortSignal
+): Promise<boolean> {
+  log("ralph", "Creating session...")
+  const sessionResult = await client.session.create()
+  if (!sessionResult.data?.id) {
+    log("ralph", "ERROR: Failed to create session")
+    throw new Error("Failed to create session")
+  }
+  const sessionId = sessionResult.data.id
+  const { providerID, modelID } = parseModel(model)
+  log("ralph", "Session created", { sessionId, providerID, modelID })
+
+  log("ralph", "Subscribing to events...")
+  const events = await client.event.subscribe()
+
+  let promptSent = false
+
+  for await (const event of events.stream) {
+    if (signal?.aborted) {
+      log("ralph", "Signal aborted during event loop")
+      return false
+    }
+
+    // Send prompt when connected
+    if (event.type === "server.connected" && !promptSent) {
+      promptSent = true
+      log("ralph", "server.connected - sending prompt")
+
+      client.session.prompt({
+        sessionID: sessionId,
+        model: { providerID, modelID },
+        parts: [{ type: "text", text: prompt }],
+      }).catch((e) => log("ralph", "Prompt error", { error: String(e) }))
+
+      continue
+    }
+
+    // Session idle - agent finished
+    if (event.type === "session.idle" && event.properties.sessionID === sessionId) {
+      log("ralph", "session.idle received - agent finished")
+      return true
+    }
+
+    // Session error
+    if (event.type === "session.error") {
+      const props = event.properties
+      if (props.sessionID !== sessionId || !props.error) continue
+
+      let errorMessage = String(props.error.name)
+      if ("data" in props.error && props.error.data && "message" in props.error.data) {
+        errorMessage = String(props.error.data.message)
+      }
+
+      log("ralph", "session.error received", { errorMessage })
+      throw new Error(errorMessage)
+    }
+  }
+
+  log("ralph", "Event loop exited unexpectedly")
+  return false
+}
+
 export async function runRalphLoop(
   ctx: RalphLoopContext,
   callbacks: RalphLoopCallbacks,
@@ -176,6 +245,8 @@ export async function runRalphLoop(
   const blockedFeatures: string[] = []
   let iteration = 0
 
+  log("ralph", "runRalphLoop started", { projectId, model })
+
   try {
     while (!signal?.aborted) {
       // Check and wait for pause
@@ -183,12 +254,14 @@ export async function runRalphLoop(
       if (signal?.aborted) break
 
       // Load current features
+      log("ralph", "Loading features...")
       const features = await readFeaturesJson(workdir, projectId)
       const nextFeature = getNextFeature(features)
 
       // No more features - we're done
       if (!nextFeature) {
         const completed = features.filter((f) => f.passes).length
+        log("ralph", "All features complete", { completed, total: features.length })
         callbacks.onComplete(completed, features.length)
         return {
           success: true,
@@ -198,6 +271,7 @@ export async function runRalphLoop(
       }
 
       iteration++
+      log("ralph", "Starting iteration", { iteration, featureId: nextFeature.id })
       callbacks.onIterationStart(iteration, nextFeature.id)
 
       // Track attempts for this feature
@@ -206,10 +280,10 @@ export async function runRalphLoop(
       // Check if max attempts exceeded
       if (currentAttempts >= MAX_ATTEMPTS) {
         const reason = `Max attempts (${MAX_ATTEMPTS}) exceeded`
+        log("ralph", "Feature blocked - max attempts", { featureId: nextFeature.id })
         callbacks.onFeatureBlocked(nextFeature.id, reason)
         blockedFeatures.push(nextFeature.id)
 
-        // Mark feature as blocked
         const updatedFeatures = updateFeature(features, nextFeature.id, {
           blocked: true,
           blockedReason: reason,
@@ -218,99 +292,93 @@ export async function runRalphLoop(
         continue
       }
 
+      // Get feedback from previous rejection stored in features.json
+      let feedback: string | undefined
+      if (nextFeature.lastRejectionFeedback && nextFeature.lastRejectionFeedback.length > 0) {
+        feedback = nextFeature.lastRejectionFeedback.join("\n")
+        log("ralph", "Feeding back rejection reasons from features.json", { featureId: nextFeature.id, feedback })
+      }
+
       // Clear any existing signals before starting
       await clearSignals(workdir)
 
-      // Get feedback from previous rejection if any
-      let feedback: string | undefined
-      const rejectionInfo = await readRejectionInfo(workdir)
-      if (rejectionInfo && rejectionInfo.featureId === nextFeature.id) {
-        feedback = rejectionInfo.reasons.join("\n")
-      }
-
-      // Spawn Ralph
+      // Run Ralph
+      log("ralph", "Starting Ralph", { featureId: nextFeature.id })
       callbacks.onRalphStart(nextFeature.id)
       const ralphPrompt = buildRalphPrompt(nextFeature, feedback)
-      const ralphSessionId = await spawnAgentSession(
-        client,
-        "globex-ralph",
-        ralphPrompt,
-        model
-      )
 
-      // Wait for Ralph to complete
-      const ralphIdle = await waitForSessionIdle(client, ralphSessionId, SESSION_TIMEOUT_MS)
-      if (!ralphIdle) {
-        callbacks.onError(new Error(`Ralph session timed out for feature ${nextFeature.id}`))
+      const ralphSuccess = await runAgentWithEvents(client, ralphPrompt, model, signal)
+      if (!ralphSuccess) {
+        if (signal?.aborted) break
+        callbacks.onError(new Error(`Ralph session failed for feature ${nextFeature.id}`))
         continue
       }
-
-      if (signal?.aborted) break
 
       callbacks.onRalphComplete(nextFeature.id)
 
       // Check if Ralph created .globex-done marker
       const doneSignal = await checkSignal(workdir, "done")
       if (!doneSignal) {
+        log("ralph", "Ralph did not create .globex-done marker", { featureId: nextFeature.id })
         callbacks.onError(new Error(`Ralph did not create .globex-done marker for ${nextFeature.id}`))
         continue
       }
 
-      // Spawn Wiggum
+      // Run Wiggum
+      log("ralph", "Starting Wiggum", { featureId: nextFeature.id })
       callbacks.onWiggumStart(nextFeature.id)
       const wiggumPrompt = buildWiggumPrompt(nextFeature)
-      const wiggumSessionId = await spawnAgentSession(
-        client,
-        "globex-wiggum",
-        wiggumPrompt,
-        model
-      )
 
-      // Wait for Wiggum to complete
-      const wiggumIdle = await waitForSessionIdle(client, wiggumSessionId, SESSION_TIMEOUT_MS)
-      if (!wiggumIdle) {
-        callbacks.onError(new Error(`Wiggum session timed out for feature ${nextFeature.id}`))
+      const wiggumSuccess = await runAgentWithEvents(client, wiggumPrompt, model, signal)
+      if (!wiggumSuccess) {
+        if (signal?.aborted) break
+        callbacks.onError(new Error(`Wiggum session failed for feature ${nextFeature.id}`))
         continue
       }
-
-      if (signal?.aborted) break
 
       // Check Wiggum's decision
       const approved = await checkSignal(workdir, "approved")
       const rejected = await checkSignal(workdir, "rejected")
 
+      log("ralph", "Wiggum decision", { featureId: nextFeature.id, approved, rejected })
       callbacks.onWiggumComplete(nextFeature.id, approved)
 
       if (approved) {
-        // Commit changes and update feature as passed
+        // Commit changes and update feature as passed (clear rejection feedback)
+        log("ralph", "Chief Wiggum APPROVED", { featureId: nextFeature.id })
         await commitChanges(workdir, `feat(${nextFeature.id}): implement feature`)
         const updatedFeatures = updateFeature(features, nextFeature.id, {
           passes: true,
+          lastRejectionFeedback: undefined,
         })
         await writeFeaturesJson(workdir, projectId, updatedFeatures)
         completedFeatures.push(nextFeature.id)
         callbacks.onFeatureComplete(nextFeature.id)
       } else if (rejected) {
-        // Increment attempt counter
+        // Increment attempt counter and store rejection feedback in features.json
         const newAttempts = currentAttempts + 1
+        const rejection = await readRejectionInfo(workdir)
+        const reasons = rejection?.reasons ?? ["Unknown reason"]
+        
+        log("ralph", "Chief Wiggum REJECTED", { featureId: nextFeature.id, attempt: newAttempts, reasons })
         const updatedFeatures = updateFeature(features, nextFeature.id, {
           attempts: newAttempts,
+          lastRejectionFeedback: reasons,
         })
 
-        // Read rejection reasons for callback
-        const rejection = await readRejectionInfo(workdir)
-        const reasonText = rejection?.reasons.join("; ") ?? "Unknown reason"
-
         await writeFeaturesJson(workdir, projectId, updatedFeatures)
-        callbacks.onFeatureRetry(nextFeature.id, newAttempts, reasonText)
+        callbacks.onFeatureRetry(nextFeature.id, newAttempts, reasons.join("; "))
       } else {
         callbacks.onError(
           new Error(`Wiggum did not create approval/rejection marker for ${nextFeature.id}`)
         )
       }
+
+      // Iteration complete - remove spinner
+      callbacks.onIterationComplete(iteration)
     }
 
-    // Aborted
+    log("ralph", "Loop aborted")
     return {
       success: false,
       completedFeatures,
@@ -319,6 +387,7 @@ export async function runRalphLoop(
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
+    log("ralph", "ERROR in runRalphLoop", { error: errorMessage })
     callbacks.onError(new Error(errorMessage))
     return {
       success: false,

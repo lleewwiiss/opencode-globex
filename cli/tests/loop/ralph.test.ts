@@ -16,13 +16,13 @@ import {
   type RalphLoopCallbacks,
 } from "../../src/loop/ralph.js"
 import * as signals from "../../src/loop/signals.js"
-import * as session from "../../src/opencode/session.js"
 import * as git from "../../src/git.js"
 import type { Feature } from "../../src/state/schema.js"
 
 // Mock callbacks factory
 const createMockCallbacks = (): RalphLoopCallbacks => ({
   onIterationStart: mock(() => {}),
+  onIterationComplete: mock(() => {}),
   onRalphStart: mock(() => {}),
   onRalphComplete: mock(() => {}),
   onWiggumStart: mock(() => {}),
@@ -36,17 +36,33 @@ const createMockCallbacks = (): RalphLoopCallbacks => ({
   onError: mock(() => {}),
 })
 
+// Create async generator that simulates SSE event stream
+async function* createMockEventStream(sessionId: string) {
+  yield { type: "server.connected" }
+  await new Promise((r) => setTimeout(r, 10))
+  yield {
+    type: "session.idle",
+    properties: { sessionID: sessionId },
+  }
+}
+
 // Mock OpenCode client factory
-const createMockClient = () => ({
-  session: {
-    create: mock(() => Promise.resolve({ data: { id: "session-123" } })),
-    prompt: mock(() => Promise.resolve({ data: {} })),
-    status: mock(() =>
-      Promise.resolve({ data: { "session-123": { type: "idle" } } })
-    ),
-    abort: mock(() => Promise.resolve({})),
-  },
-})
+const createMockClient = () => {
+  const sessionId = "session-123"
+  return {
+    session: {
+      create: mock(() => Promise.resolve({ data: { id: sessionId } })),
+      prompt: mock(() => Promise.resolve({ data: {} })),
+    },
+    event: {
+      subscribe: mock(() =>
+        Promise.resolve({
+          stream: createMockEventStream(sessionId),
+        })
+      ),
+    },
+  }
+}
 
 // Sample feature factory
 const createTestFeature = (overrides?: Partial<Feature>): Feature => ({
@@ -100,14 +116,6 @@ describe("cli/loop/ralph", () => {
       const client = createMockClient()
       const callbacks = createMockCallbacks()
 
-      // Mock session functions with small delay
-      const spawnSpy = spyOn(session, "spawnAgentSession").mockImplementation(
-        () => new Promise((r) => setTimeout(() => r("session-123"), 10))
-      )
-      const waitSpy = spyOn(session, "waitForSessionIdle").mockImplementation(
-        () => new Promise((r) => setTimeout(() => r(true), 10))
-      )
-
       // Mock signals
       const checkSignalSpy = spyOn(signals, "checkSignal").mockImplementation(
         async (_workdir: string, type: signals.SignalType) => {
@@ -152,8 +160,6 @@ describe("cli/loop/ralph", () => {
       expect(callbacks.onComplete).toHaveBeenCalledWith(1, 1)
 
       // Cleanup spies
-      spawnSpy.mockRestore()
-      waitSpy.mockRestore()
       checkSignalSpy.mockRestore()
       clearSpy.mockRestore()
       commitSpy.mockRestore()
@@ -191,14 +197,6 @@ describe("cli/loop/ralph", () => {
       // Track iterations to abort after first rejection
       let iterationCount = 0
       const abortController = new AbortController()
-
-      // Mock session functions with delay
-      const spawnSpy = spyOn(session, "spawnAgentSession").mockImplementation(
-        () => new Promise((r) => setTimeout(() => r("session-123"), 10))
-      )
-      const waitSpy = spyOn(session, "waitForSessionIdle").mockImplementation(
-        () => new Promise((r) => setTimeout(() => r(true), 10))
-      )
 
       // Mock signals
       const checkSignalSpy = spyOn(signals, "checkSignal").mockImplementation(
@@ -244,8 +242,6 @@ describe("cli/loop/ralph", () => {
       expect(features[0].passes).toBe(false)
       expect(callbacks.onFeatureRetry).toHaveBeenCalled()
 
-      spawnSpy.mockRestore()
-      waitSpy.mockRestore()
       checkSignalSpy.mockRestore()
       clearSpy.mockRestore()
     })
@@ -355,23 +351,34 @@ describe("cli/loop/ralph", () => {
       const feature = createTestFeature()
       await writeFeaturesJson([feature])
 
-      const client = createMockClient()
+      // Create a mock client that takes time to complete
+      async function* slowEventStream(sessionId: string) {
+        yield { type: "server.connected" }
+        await new Promise((r) => setTimeout(r, 200))
+        yield {
+          type: "session.idle",
+          properties: { sessionID: sessionId },
+        }
+      }
+
+      const sessionId = "session-123"
+      const client = {
+        session: {
+          create: mock(() => Promise.resolve({ data: { id: sessionId } })),
+          prompt: mock(() => Promise.resolve({ data: {} })),
+        },
+        event: {
+          subscribe: mock(() =>
+            Promise.resolve({
+              stream: slowEventStream(sessionId),
+            })
+          ),
+        },
+      }
+
       const callbacks = createMockCallbacks()
       const abortController = new AbortController()
 
-      // Mock to pause/wait long enough for abort
-      const spawnSpy = spyOn(session, "spawnAgentSession").mockImplementation(
-        () =>
-          new Promise((r) => {
-            setTimeout(() => r("session-123"), 100)
-          })
-      )
-      const waitSpy = spyOn(session, "waitForSessionIdle").mockImplementation(
-        () =>
-          new Promise((r) => {
-            setTimeout(() => r(true), 200)
-          })
-      )
       const clearSpy = spyOn(signals, "clearSignals").mockResolvedValue()
       const checkSpy = spyOn(signals, "checkSignal").mockResolvedValue(false)
 
@@ -382,16 +389,14 @@ describe("cli/loop/ralph", () => {
         model: "anthropic/claude-sonnet-4",
       }
 
-      // Abort after spawn starts
-      setTimeout(() => abortController.abort(), 150)
+      // Abort during session
+      setTimeout(() => abortController.abort(), 100)
 
       const result = await runRalphLoop(ctx, callbacks, abortController.signal)
 
       expect(result.success).toBe(false)
       expect(result.error).toBe("Loop aborted")
 
-      spawnSpy.mockRestore()
-      waitSpy.mockRestore()
       clearSpy.mockRestore()
       checkSpy.mockRestore()
     })
@@ -402,17 +407,30 @@ describe("cli/loop/ralph", () => {
       const feature = createTestFeature()
       await writeFeaturesJson([feature])
 
-      const client = createMockClient()
+      // Create a mock client where event stream ends unexpectedly
+      async function* emptyEventStream() {
+        yield { type: "server.connected" }
+        // Stream ends without session.idle
+      }
+
+      const sessionId = "session-123"
+      const client = {
+        session: {
+          create: mock(() => Promise.resolve({ data: { id: sessionId } })),
+          prompt: mock(() => Promise.resolve({ data: {} })),
+        },
+        event: {
+          subscribe: mock(() =>
+            Promise.resolve({
+              stream: emptyEventStream(),
+            })
+          ),
+        },
+      }
+
       const callbacks = createMockCallbacks()
       const abortController = new AbortController()
 
-      // Mock session to time out
-      const spawnSpy = spyOn(session, "spawnAgentSession").mockResolvedValue(
-        "session-123"
-      )
-      const waitSpy = spyOn(session, "waitForSessionIdle").mockResolvedValue(
-        false
-      )
       const clearSpy = spyOn(signals, "clearSignals").mockResolvedValue()
       const checkSpy = spyOn(signals, "checkSignal").mockResolvedValue(false)
 
@@ -432,8 +450,6 @@ describe("cli/loop/ralph", () => {
 
       expect(callbacks.onError).toHaveBeenCalled()
 
-      spawnSpy.mockRestore()
-      waitSpy.mockRestore()
       clearSpy.mockRestore()
       checkSpy.mockRestore()
     })
@@ -446,12 +462,6 @@ describe("cli/loop/ralph", () => {
       const callbacks = createMockCallbacks()
       const abortController = new AbortController()
 
-      const spawnSpy = spyOn(session, "spawnAgentSession").mockResolvedValue(
-        "session-123"
-      )
-      const waitSpy = spyOn(session, "waitForSessionIdle").mockResolvedValue(
-        true
-      )
       const clearSpy = spyOn(signals, "clearSignals").mockResolvedValue()
       const checkSpy = spyOn(signals, "checkSignal").mockImplementation(
         async (_workdir: string, type: signals.SignalType) => {
@@ -475,8 +485,6 @@ describe("cli/loop/ralph", () => {
 
       expect(callbacks.onError).toHaveBeenCalled()
 
-      spawnSpy.mockRestore()
-      waitSpy.mockRestore()
       clearSpy.mockRestore()
       checkSpy.mockRestore()
     })

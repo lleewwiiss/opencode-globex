@@ -29,6 +29,8 @@ export const TOOL_ICONS: Record<string, string> = {
   grep: "\u2731", // ✱
   bash: "$",
   task: "\u25C9", // ◉
+  ralph: "\u25C9", // ◉
+  wiggum: "\u2605", // ★
   webfetch: "%",
   websearch: "\u25C8", // ◈
   codesearch: "\u25C7", // ◇

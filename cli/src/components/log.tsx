@@ -17,7 +17,8 @@ function getToolColor(icon: string | undefined): string {
   if (icon === TOOL_ICONS.read) return colors.blue
   if (icon === TOOL_ICONS.write || icon === TOOL_ICONS.edit) return colors.green
   if (icon === TOOL_ICONS.glob || icon === TOOL_ICONS.grep) return colors.yellow
-  if (icon === TOOL_ICONS.task) return colors.purple
+  if (icon === TOOL_ICONS.task || icon === TOOL_ICONS.ralph) return colors.purple
+  if (icon === TOOL_ICONS.wiggum) return colors.yellow
   if (
     icon === TOOL_ICONS.webfetch ||
     icon === TOOL_ICONS.websearch ||
@@ -31,9 +32,10 @@ function getToolColor(icon: string | undefined): string {
 export type LogProps = {
   events: ToolEvent[]
   isIdle: boolean
+  currentAgent: "idle" | "ralph" | "wiggum"
 }
 
-function Spinner(props: { isIdle: boolean }) {
+function Spinner(props: { isIdle: boolean; currentAgent: "idle" | "ralph" | "wiggum" }) {
   const [frame, setFrame] = createSignal(0)
   let intervalRef: ReturnType<typeof setInterval> | null = null
 
@@ -59,10 +61,15 @@ function Spinner(props: { isIdle: boolean }) {
     }
   })
 
+  const message = () => {
+    if (props.currentAgent === "wiggum") return "Chief Wiggum is keeping him in line..."
+    return "Ralph is working..."
+  }
+
   return (
     <box width="100%" flexDirection="row" paddingTop={1}>
       <text fg={colors.cyan}>{SPINNER_FRAMES[frame()]}</text>
-      <text fg={colors.fgMuted}> looping...</text>
+      <text fg={colors.fgMuted}> {message()}</text>
     </box>
   )
 }
@@ -113,7 +120,7 @@ export function Log(props: LogProps) {
         backgroundColor: colors.bg,
       }}
       viewportOptions={{
-        backgroundColor: colors.bgDark,
+        backgroundColor: colors.bg,
       }}
       verticalScrollbarOptions={{
         visible: true,
@@ -126,7 +133,7 @@ export function Log(props: LogProps) {
         {(event) => (
           <Switch>
             <Match when={event.type === "spinner"}>
-              <Spinner isIdle={props.isIdle} />
+              <Spinner isIdle={props.isIdle} currentAgent={props.currentAgent} />
             </Match>
             <Match when={event.type === "separator"}>
               <SeparatorEvent event={event} />

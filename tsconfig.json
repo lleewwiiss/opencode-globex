@@ -12,7 +12,7 @@
     "declaration": true,
     "resolveJsonModule": true,
     "jsx": "preserve",
-    "jsxImportSource": "solid-js"
+    "jsxImportSource": "@opentui/solid"
   },
   "include": ["cli/**/*.ts", "cli/**/*.tsx"],
   "exclude": ["node_modules", "dist"]

@@ -44,12 +44,25 @@ export type HeaderProps = {
   totalFeatures: number
   startedAt?: number
   eta?: number
+  currentAgent?: "idle" | "ralph" | "wiggum"
+  paused?: boolean
+}
+
+const AGENT_DISPLAY: Record<"idle" | "ralph" | "wiggum", { icon: string; color: string; label: string }> = {
+  idle: { icon: "◌", color: colors.fgMuted, label: "idle" },
+  ralph: { icon: "◉", color: colors.purple, label: "ralph" },
+  wiggum: { icon: "★", color: colors.yellow, label: "wiggum" },
 }
 
 export function Header(props: HeaderProps) {
   const phaseIcon = createMemo(() => PHASE_ICONS[props.phase])
   const phaseColor = createMemo(() => PHASE_COLORS[props.phase])
   const phaseLabel = createMemo(() => PHASE_LABELS[props.phase])
+
+  const agentDisplay = createMemo(() => {
+    if (props.paused) return { icon: "⏸", color: colors.yellow, label: "paused" }
+    return AGENT_DISPLAY[props.currentAgent ?? "idle"]
+  })
 
   const progress = createMemo(() => {
     if (props.totalFeatures === 0) return null
@@ -97,7 +110,11 @@ export function Header(props: HeaderProps) {
 
       <box flexGrow={1} />
 
+      <text fg={agentDisplay().color}>{agentDisplay().icon}</text>
+      <text fg={agentDisplay().color}> {agentDisplay().label}</text>
+
       <Show when={etaText()}>
+        <text fg={colors.fgMuted}>{" · "}</text>
         <text fg={colors.fgMuted}>ETA </text>
         <text fg={colors.cyan}>{etaText()}</text>
       </Show>

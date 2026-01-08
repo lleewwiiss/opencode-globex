@@ -141,3 +141,43 @@ export const saveState = async (workdir: string, projectId: string, state: Globe
 
 export const checkStateExists = async (workdir: string, projectId: string): Promise<boolean> =>
   Effect.runPromise(stateExists(workdir, projectId))
+
+export const createState = (projectName: string, description: string, phase: Phase = "init"): GlobexState => ({
+  currentPhase: phase,
+  projectName,
+  description,
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+  approvals: {},
+  artifacts: {},
+  interviewHistory: {},
+})
+
+export const sanitizeProjectId = (name: string): string =>
+  name.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").slice(0, 50)
+
+export const getActiveProjectPath = (workdir: string): string =>
+  `${workdir}/${GLOBEX_DIR}/active-project`
+
+export const setActiveProject = async (workdir: string, projectId: string): Promise<void> => {
+  const effect = Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem
+    const basePath = `${workdir}/${GLOBEX_DIR}`
+    const activePath = getActiveProjectPath(workdir)
+    yield* fs.makeDirectory(basePath, { recursive: true })
+    yield* fs.writeFileString(activePath, projectId)
+  }).pipe(Effect.provide(NodeFileSystem.layer))
+  return Effect.runPromise(effect)
+}
+
+export const getActiveProject = async (workdir: string): Promise<string | undefined> => {
+  const effect = Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem
+    const activePath = getActiveProjectPath(workdir)
+    const exists = yield* fs.exists(activePath)
+    if (!exists) return undefined
+    const content = yield* fs.readFileString(activePath)
+    return content.trim()
+  }).pipe(Effect.provide(NodeFileSystem.layer))
+  return Effect.runPromise(effect).catch(() => undefined)
+}

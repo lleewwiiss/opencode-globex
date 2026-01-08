@@ -85,6 +85,9 @@ export const FeatureSchema = Schema.Struct({
   attempts: Schema.optional(Schema.Number),
   patternsToFollow: Schema.optional(Schema.Array(PatternRefSchema)),
   completedAt: Schema.optional(Schema.String),
+  blocked: Schema.optional(Schema.Boolean),
+  blockedReason: Schema.optional(Schema.String),
+  lastRejectionFeedback: Schema.optional(Schema.Array(Schema.String)),
 })
 export type Feature = Schema.Schema.Type<typeof FeatureSchema>
 

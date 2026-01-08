@@ -80,6 +80,8 @@ export const PHASE_TRANSITIONS: Record<Phase, Phase[]> = {
 
 export type LoopStatus = "running" | "paused" | "complete" | "error"
 
+export type AgentStatus = "idle" | "ralph" | "wiggum"
+
 export type ToolEvent = {
   iteration: number
   type: "tool" | "separator" | "spinner"
