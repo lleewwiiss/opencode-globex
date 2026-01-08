@@ -7,7 +7,7 @@ import {
   type Features,
   type ResearchCitations,
   type PlanRisks,
-} from "../../../src/state/schema.js"
+} from "../state/schema.js"
 
 export interface ValidationError {
   path: string

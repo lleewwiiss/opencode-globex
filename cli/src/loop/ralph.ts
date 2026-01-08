@@ -1,5 +1,5 @@
 import type { OpencodeClient } from "@opencode-ai/sdk/v2/client"
-import type { Feature } from "../../../src/state/schema.js"
+import type { Feature } from "../state/schema.js"
 import { getNextFeature, updateFeature } from "../features/manager.js"
 import { checkSignal, clearSignals } from "./signals.js"
 import { spawnAgentSession, waitForSessionIdle } from "../opencode/session.js"

@@ -18,7 +18,7 @@ import {
 import * as signals from "../../src/loop/signals.js"
 import * as session from "../../src/opencode/session.js"
 import * as git from "../../src/git.js"
-import type { Feature } from "../../../src/state/schema.js"
+import type { Feature } from "../../src/state/schema.js"
 
 // Mock callbacks factory
 const createMockCallbacks = (): RalphLoopCallbacks => ({

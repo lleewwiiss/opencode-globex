@@ -9,18 +9,17 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "test": "bun test cli/ tests/",
-    "test:unit": "bun test tests/*.test.ts",
-    "test:integration": "bun test tests/integration/*.test.ts",
+    "test": "bun test cli/",
+    "test:unit": "bun test cli/tests/*.test.ts",
+    "test:integration": "bun test cli/tests/integration/*.test.ts",
     "test:watch": "bun test --watch",
-    "lint": "oxlint src/",
-    "lint:fix": "oxlint src/ --fix",
+    "lint": "oxlint cli/src/",
+    "lint:fix": "oxlint cli/src/ --fix",
     "check": "bun run lint && bun run build && bun test"
   },
   "dependencies": {
     "@effect/platform": "^0.94.1",
     "@effect/platform-node": "^0.104.0",
-    "@opencode-ai/plugin": "^1.0.0",
     "@opencode-ai/sdk": "^1.1.1",
     "@opentui/core": "^0.1.68",
     "@opentui/solid": "^0.1.68",

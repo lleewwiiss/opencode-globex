@@ -4,7 +4,7 @@ import {
   updateFeature,
   getProgressStats,
 } from "../../src/features/manager.js"
-import type { Feature } from "../../../src/state/schema.js"
+import type { Feature } from "../../src/state/schema.js"
 
 const makeFeature = (overrides: Partial<Feature> & { id: string }): Feature => ({
   description: `Feature ${overrides.id}`,

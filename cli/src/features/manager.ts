@@ -1,4 +1,4 @@
-import type { Feature } from "../../../src/state/schema.js"
+import type { Feature } from "../state/schema.js"
 
 export interface ProgressStats {
   completed: number
