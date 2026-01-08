@@ -12,6 +12,7 @@ import { createUpdateProgress } from "./tools/update-progress.js"
 import { createAddLearning } from "./tools/add-learning.js"
 import { createSetPhase } from "./tools/set-phase.js"
 import { createSelectProject } from "./tools/select-project.js"
+import { createLoopControl } from "./tools/loop-control.js"
 import { stateExists, loadState, getGlobexBaseDir } from "./state/persistence.js"
 import type { Phase } from "./state/types.js"
 import * as fs from "node:fs/promises"
@@ -314,6 +315,7 @@ export const GlobexPlugin: Plugin = async (ctx) => {
       globex_update_progress: createUpdateProgress(workdir),
       globex_add_learning: createAddLearning(workdir),
       globex_set_phase: createSetPhase(workdir),
+      globex_loop_control: createLoopControl(workdir),
     },
 
     config: async (config) => {

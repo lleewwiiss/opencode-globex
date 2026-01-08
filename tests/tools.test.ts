@@ -481,6 +481,52 @@ Project instructions.
       expect(secondIndex).toBeGreaterThan(firstIndex)
     })
   })
+
+  describe("globex_loop_control", () => {
+    test("returns status action result", async () => {
+      const { createLoopControl } = await import("../src/tools/loop-control")
+      const tool = createLoopControl(testDir)
+      
+      const result = await tool.execute(
+        { action: "status" },
+        mockContext()
+      )
+      
+      const parsed = JSON.parse(result)
+      expect(parsed.success).toBe(true)
+      expect(parsed.action).toBe("status")
+    })
+
+    test("returns start action result with defaults", async () => {
+      const { createLoopControl } = await import("../src/tools/loop-control")
+      const tool = createLoopControl(testDir)
+      
+      const result = await tool.execute(
+        { action: "start" },
+        mockContext()
+      )
+      
+      const parsed = JSON.parse(result)
+      expect(parsed.success).toBe(true)
+      expect(parsed.action).toBe("start")
+      expect(parsed.maxIterations).toBe(50)
+      expect(parsed.model).toBe("claude-3-5-sonnet-20241022")
+    })
+
+    test("validates invalid action", async () => {
+      const { createLoopControl } = await import("../src/tools/loop-control")
+      const tool = createLoopControl(testDir)
+      
+      const result = await tool.execute(
+        { action: "invalid" } as any,
+        mockContext()
+      )
+      
+      const parsed = JSON.parse(result)
+      expect(parsed.success).toBe(false)
+      expect(parsed.error).toContain("Loop control failed")
+    })
+  })
 })
 
 function mockContext() {
