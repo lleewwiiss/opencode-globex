@@ -117,7 +117,9 @@ cleanup() {
 }
 trap cleanup EXIT
 
-ITERATION=1
+# Start iteration from number of completed features + 1
+COMPLETED_COUNT=$(jq '[.features[] | select(.passes == true)] | length' "$FEATURES_FILE" 2>/dev/null || echo 0)
+ITERATION=$((COMPLETED_COUNT + 1))
 
 while [[ $ITERATION -le $MAX_ITERATIONS ]]; do
   # Progress bar
@@ -126,13 +128,67 @@ while [[ $ITERATION -le $MAX_ITERATIONS ]]; do
   
   echo -e "\n${CYAN}────── Iteration $ITERATION ──────${RESET} ${DIM}($((TOTAL - INCOMPLETE))/$TOTAL done)${RESET}"
   
-  # --- RALPH ---
-  print_status "🔨" "$YELLOW" "Ralph implementing..."
-  log "Ralph starting iteration $ITERATION"
+  # --- GET NEXT FEATURE ---
+  # Find next eligible feature (not passes, not blocked, deps satisfied)
+  COMPLETED_IDS=$(jq -r '[.features[] | select(.passes == true) | .id] | join(",")' "$FEATURES_FILE")
+  NEXT_FEATURE=$(jq -r --arg completed "$COMPLETED_IDS" '
+    .features[] | 
+    select(.passes != true and .blocked != true) |
+    select(.dependencies | all(. as $dep | ($completed | split(",") | index($dep)) != null)) |
+    . | @json
+  ' "$FEATURES_FILE" | head -1)
   
+  if [[ -z "$NEXT_FEATURE" || "$NEXT_FEATURE" == "null" ]]; then
+    # Check if all done or all blocked
+    REMAINING=$(jq '[.features[] | select(.passes != true)] | length' "$FEATURES_FILE")
+    if [[ "$REMAINING" == "0" ]]; then
+      print_header "✅ ALL FEATURES COMPLETE"
+      exit 0
+    else
+      print_header "⚠ All remaining features are blocked"
+      jq -r '.features[] | select(.blocked == true) | "  - \(.id): \(.blockedReason // "unknown")"' "$FEATURES_FILE"
+      exit 1
+    fi
+  fi
+  
+  # Extract feature details
+  FEATURE_ID=$(echo "$NEXT_FEATURE" | jq -r '.id')
+  FEATURE_DESC=$(echo "$NEXT_FEATURE" | jq -r '.description')
+  FEATURE_CRITERIA=$(echo "$NEXT_FEATURE" | jq -r '.acceptanceCriteria | join("; ")' 2>/dev/null || echo "")
+  FEATURE_FILES=$(echo "$NEXT_FEATURE" | jq -r '.filesTouched | join(", ")' 2>/dev/null || echo "")
+  FEATURE_ATTEMPTS=$(echo "$NEXT_FEATURE" | jq -r '.attempts // 0')
+  FEATURE_FEEDBACK=$(echo "$NEXT_FEATURE" | jq -r '.feedback // ""')
+  
+  # --- RALPH ---
+  print_status "🔨" "$YELLOW" "Ralph implementing: $FEATURE_ID"
+  log "Ralph starting iteration $ITERATION - $FEATURE_ID"
+  
+  # Build prompt with feature context (no plugin tools needed)
+  RALPH_PROMPT="Implement this feature. Output <ralph>DONE:$FEATURE_ID</ralph> when ready.
+
+FEATURE: $FEATURE_ID
+DESCRIPTION: $FEATURE_DESC
+ACCEPTANCE CRITERIA: $FEATURE_CRITERIA
+FILES TO MODIFY: $FEATURE_FILES
+ATTEMPTS SO FAR: $FEATURE_ATTEMPTS"
+
+  if [[ -n "$FEATURE_FEEDBACK" && "$FEATURE_FEEDBACK" != "" ]]; then
+    RALPH_PROMPT="$RALPH_PROMPT
+FEEDBACK FROM LAST REJECTION: $FEATURE_FEEDBACK
+Your changes are still in the working tree - fix based on feedback."
+  fi
+
+  RALPH_PROMPT="$RALPH_PROMPT
+
+RULES:
+- Do NOT commit (script handles commits)
+- Do NOT use globex_* tools (not available)
+- Run build/test to verify before outputting DONE
+- If stuck after 3 attempts, output <ralph>STUCK:reason</ralph>"
+
   # Capture output, suppress live output
   if ! opencode run --agent globex-ralph -m "$MODEL" --variant "$VARIANT" \
-    "Implement ONE feature. Output <ralph>DONE:FEATURE_ID</ralph> when ready for validation. Do NOT commit. Do NOT call globex_update_feature with passes:true." \
+    "$RALPH_PROMPT" \
     > "$RALPH_OUTPUT" 2>&1; then
     print_status "⚠" "$YELLOW" "Ralph exited with error, checking output..."
   fi
@@ -203,10 +259,10 @@ while [[ $ITERATION -le $MAX_ITERATIONS ]]; do
     print_status "❌" "$RED" "REJECTED"
     log "Wiggum rejected $FEATURE_ID"
     
-    # Extract feedback
+    # Extract feedback - get everything after IMMEDIATE ACTIONS heading
     FEEDBACK=""
     if grep -qa "IMMEDIATE ACTIONS" "$WIGGUM_OUTPUT"; then
-      FEEDBACK=$(sed -n '/IMMEDIATE ACTIONS/,/^$/p' "$WIGGUM_OUTPUT" | head -15 | tr '\n' ' ' | sed 's/  */ /g')
+      FEEDBACK=$(sed -n '/IMMEDIATE ACTIONS/,$p' "$WIGGUM_OUTPUT" | tail -n +2 | head -20 | tr '\n' ' ' | sed 's/  */ /g')
     else
       FEEDBACK="Rejected without specific actions"
     fi

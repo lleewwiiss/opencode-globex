@@ -66,3 +66,31 @@ export const PHASE_ORDER: Phase[] = [
   "execute",
   "complete",
 ]
+
+export const PHASE_TRANSITIONS: Record<Phase, Phase[]> = {
+  init: ["research"],
+  research: ["research_interview"],
+  research_interview: ["plan", "research"],
+  plan: ["plan_interview"],
+  plan_interview: ["features", "plan"],
+  features: ["execute"],
+  execute: ["complete"],
+  complete: [],
+}
+
+export type LoopStatus = "running" | "paused" | "complete" | "error"
+
+export interface LoopState {
+  status: LoopStatus
+  iteration: number
+  currentFeatureId?: string
+  lastCommitHash?: string
+  totalIterations?: number
+  startedAt?: string
+  pausedAt?: string
+  ralphSessionId?: string
+  wiggumSessionId?: string
+  lastSignal?: "approved" | "rejected"
+  completedFeatures: string[]
+  blockedFeatures: string[]
+}

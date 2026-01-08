@@ -42,18 +42,13 @@ Prefer LSP over grep for understanding code relationships.
 
 ## Protocol
 
-1. Call `globex_get_next_feature()` for next eligible feature
-   - **CRITICAL**: If `"done": true` → output `<promise>ALL_FEATURES_COMPLETE</promise>` and stop
-   - If `"blocked": true` → output `<ralph>BLOCKED</ralph>` and stop
+1. The feature to implement is provided in the prompt (no tool call needed)
+   - Feature ID, description, acceptance criteria, and files are all in the prompt
+   - If feedback is provided, your changes are still in working tree - fix them
 
-2. Check for feedback from previous rejection:
-   - Feature object includes `feedback` field if Wiggum rejected last attempt
-   - Your uncommitted changes are still in the working tree - fix based on feedback
-   - `attempts` field shows how many tries so far
+2. Read `.globex/progress.md` for learnings from previous iterations
 
-4. Read `.globex/progress.md` for learnings from previous iterations
-
-5. Implement the feature:
+3. Implement the feature:
    - Follow existing codebase patterns
    - Touch only files listed in `filesTouched`
    - Meet all acceptance criteria
@@ -75,7 +70,7 @@ Prefer LSP over grep for understanding code relationships.
 ## What NOT To Do
 
 - **DO NOT** run `git commit` - script commits after Wiggum approves
-- **DO NOT** call `globex_update_feature(passes: true)` - script marks passes
+- **DO NOT** call any `globex_*` tools - they are not available, script handles state
 - **DO NOT** implement multiple features
 - **DO NOT** git push
 
