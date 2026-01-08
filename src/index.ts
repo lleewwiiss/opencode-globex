@@ -373,7 +373,13 @@ After successful init, tell the user to run /globex-research to begin codebase e
 5. /globex-interview - Validate plan (subagent)
 6. /globex-features - Generate feature list (subagent)
 7. /globex-interview - Validate features (subagent)
-8. /globex-run - Execute Ralph loop (run via ./scripts/ralph-loop.sh)
+8. /globex-loop start - Execute Ralph loop (autonomous iterations)
+
+Loop control:
+- /globex-loop start [maxIterations] [model] - Start autonomous execution
+- /globex-loop pause - Pause loop execution
+- /globex-loop resume - Resume paused loop
+- /globex-loop status - Check loop status
 
 Use /globex-status anytime to check progress.`,
           description: "Show Globex workflow help",
