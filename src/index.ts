@@ -378,6 +378,15 @@ After successful init, tell the user to run /globex-research to begin codebase e
 Use /globex-status anytime to check progress.`,
           description: "Show Globex workflow help",
         },
+        "globex-loop": {
+          template: `Control the globex Ralph loop execution.
+Usage:
+- /globex-loop start [maxIterations] [model]
+- /globex-loop pause  
+- /globex-loop resume
+- /globex-loop status`,
+          description: "Control the autonomous Ralph loop execution",
+        },
       }
 
       config.agent = {
