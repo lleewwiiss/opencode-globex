@@ -3,7 +3,7 @@ import type { Feature } from "../state/schema.js"
 import { getNextFeature, updateFeature } from "../features/manager.js"
 import { checkSignal, clearSignals } from "./signals.js"
 import { parseModel, abortSession } from "../opencode/session.js"
-import { commitChanges, getHeadHash, getCommitsSince } from "../git.js"
+import { commitChanges, getHeadHash, getCommitsSince, getDiffStats } from "../git.js"
 import { readFeatures, writeFeatures, readRejectionInfo } from "../state/features-persistence.js"
 import { RALPH_PROMPT, WIGGUM_PROMPT } from "../agents/prompts.js"
 import { log } from "../util/log.js"
@@ -33,6 +33,7 @@ export interface RalphLoopCallbacks {
   onComplete: (completedCount: number, totalCount: number) => void
   onError: (error: Error) => void
   onCommitsUpdated: (commits: number) => void
+  onDiffUpdated: (linesAdded: number, linesRemoved: number) => void
 }
 
 export interface RalphLoopResult {

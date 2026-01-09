@@ -213,6 +213,30 @@ export const commitChangesEffect = (workdir: string, message: string) =>
     return yield* service.commitChanges(workdir, message)
   }).pipe(Effect.provide(GitLayer))
 
+export const createWorktreeEffect = (workdir: string, path: string, branch: string) =>
+  Effect.gen(function* () {
+    const service = yield* GitService
+    return yield* service.createWorktree(workdir, path, branch)
+  }).pipe(Effect.provide(GitLayer))
+
+export const removeWorktreeEffect = (workdir: string, path: string) =>
+  Effect.gen(function* () {
+    const service = yield* GitService
+    return yield* service.removeWorktree(workdir, path)
+  }).pipe(Effect.provide(GitLayer))
+
+export const listWorktreesEffect = (workdir: string) =>
+  Effect.gen(function* () {
+    const service = yield* GitService
+    return yield* service.listWorktrees(workdir)
+  }).pipe(Effect.provide(GitLayer))
+
+export const mergeWorktreeEffect = (workdir: string, branch: string) =>
+  Effect.gen(function* () {
+    const service = yield* GitService
+    return yield* service.mergeWorktree(workdir, branch)
+  }).pipe(Effect.provide(GitLayer))
+
 export const getHeadHash = async (workdir: string): Promise<string> =>
   Effect.runPromise(getHeadHashEffect(workdir))
 
@@ -224,3 +248,15 @@ export const getDiffStats = async (workdir: string): Promise<DiffStats> =>
 
 export const commitChanges = async (workdir: string, message: string): Promise<string> =>
   Effect.runPromise(commitChangesEffect(workdir, message))
+
+export const createWorktree = async (workdir: string, path: string, branch: string): Promise<Worktree> =>
+  Effect.runPromise(createWorktreeEffect(workdir, path, branch))
+
+export const removeWorktree = async (workdir: string, path: string): Promise<void> =>
+  Effect.runPromise(removeWorktreeEffect(workdir, path))
+
+export const listWorktrees = async (workdir: string): Promise<Worktree[]> =>
+  Effect.runPromise(listWorktreesEffect(workdir))
+
+export const mergeWorktree = async (workdir: string, branch: string): Promise<MergeResult> =>
+  Effect.runPromise(mergeWorktreeEffect(workdir, branch))
