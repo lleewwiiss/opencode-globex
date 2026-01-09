@@ -54,6 +54,11 @@ export function TextInput(props: TextInputProps) {
       props.onSubmit(trimmed)
       if (props.clearOnSubmit ?? true) {
         textareaRef.clear()
+      } else {
+        // Re-insert text since OpenTUI may have cleared it on submit action
+        textareaRef.clear()
+        textareaRef.insertText(text)
+        lastPropsValue = text
       }
     }
   }

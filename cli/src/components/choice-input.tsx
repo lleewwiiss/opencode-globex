@@ -67,6 +67,7 @@ export function ChoiceInput(props: ChoiceInputProps) {
   })
   
   const handleCustomSubmit = (text: string) => {
+    setCustomText(text)
     props.onSelect(text, true)
     setCustomMode(false)
     props.onAdvance?.()
@@ -77,6 +78,15 @@ export function ChoiceInput(props: ChoiceInputProps) {
   return (
     <box flexDirection="column" gap={1}>
       <Show when={!customMode()}>
+        <Show when={props.isCustom && customText()}>
+          <box flexDirection="column" marginBottom={1}>
+            <text fg={colors.green}>✓ Your answer:</text>
+            <box marginLeft={2} marginTop={1}>
+              <text fg={colors.fg}>{customText()}</text>
+            </box>
+            <text fg={colors.fgDark} marginTop={1}>(Press Enter on "Type your own answer" to edit)</text>
+          </box>
+        </Show>
         <For each={optionsWithCustom()}>
           {(option, index) => {
             const isSelected = () => index() === selectedIndex()
