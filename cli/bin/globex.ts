@@ -4,6 +4,7 @@ import { hideBin } from "yargs/helpers"
 import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync } from "fs"
 import { join } from "path"
 import { main } from "../src/index.js"
+import { upsertProject, type RegistryEntry } from "../src/state/registry.js"
 
 const DEFAULT_MODEL = "anthropic/claude-opus-4-5"
 const GLOBEX_DIR = ".globex"
@@ -62,7 +63,47 @@ const workdir = process.cwd()
 
 await yargs(hideBin(process.argv))
   .scriptName("globex")
-  .usage("$0 [options]")
+  .usage("$0 <command> [options]")
+  .command(
+    "init <description>",
+    "Initialize a new globex project",
+    (yargs) =>
+      yargs
+        .positional("description", {
+          type: "string",
+          describe: "Description of the project/feature",
+          demandOption: true,
+        }),
+    async (argv) => {
+      const description = argv.description as string
+      const projectId = slugify(description)
+      
+      if (projectExists(workdir, projectId)) {
+        console.log(`Resuming existing project: ${projectId}`)
+      } else {
+        console.log(`Creating project: ${projectId}`)
+        createProject(workdir, projectId, description)
+      }
+      
+      // Register in global registry
+      const registryEntry: RegistryEntry = {
+        name: description,
+        repoPath: workdir,
+        phase: "init",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }
+      await upsertProject(projectId, registryEntry)
+      
+      setActiveProject(workdir, projectId)
+      
+      // Launch TUI
+      await main({
+        projectId,
+        model: argv.model as string,
+      })
+    }
+  )
   .command(
     "$0",
     "Run globex TUI (auto-detects or creates project)",

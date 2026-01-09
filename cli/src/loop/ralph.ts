@@ -38,10 +38,10 @@ export interface IterationResult {
 export interface RalphLoopCallbacks {
   onIterationStart: (iteration: number, featureId: string) => void
   onIterationComplete: (iteration: number, result: IterationResult) => void
-  onRalphStart: (featureId: string) => void
-  onRalphComplete: (featureId: string) => void
-  onWiggumStart: (featureId: string) => void
-  onWiggumComplete: (featureId: string, approved: boolean) => void
+  onRalphStart: (iteration: number, featureId: string) => void
+  onRalphComplete: (iteration: number, featureId: string) => void
+  onWiggumStart: (iteration: number, featureId: string) => void
+  onWiggumComplete: (iteration: number, featureId: string, approved: boolean) => void
   onFeatureComplete: (featureId: string) => void
   onFeatureRetry: (featureId: string, attempt: number, reason: string) => void
   onFeatureBlocked: (featureId: string, reason: string) => void
@@ -325,7 +325,7 @@ export async function runRalphLoop(
 
       // Run Ralph
       log("ralph", "Starting Ralph", { featureId: nextFeature.id })
-      callbacks.onRalphStart(nextFeature.id)
+      callbacks.onRalphStart(iteration, nextFeature.id)
       const ralphPrompt = buildRalphPrompt(nextFeature, feedback)
 
       const ralphSuccess = await runAgentWithEvents(
@@ -346,7 +346,7 @@ export async function runRalphLoop(
         continue
       }
 
-      callbacks.onRalphComplete(nextFeature.id)
+      callbacks.onRalphComplete(iteration, nextFeature.id)
 
       // Check if Ralph created .globex-done marker
       const doneSignal = await checkSignal(workdir, "done")
@@ -358,7 +358,7 @@ export async function runRalphLoop(
 
       // Run Wiggum
       log("ralph", "Starting Wiggum", { featureId: nextFeature.id })
-      callbacks.onWiggumStart(nextFeature.id)
+      callbacks.onWiggumStart(iteration, nextFeature.id)
       const wiggumPrompt = buildWiggumPrompt(nextFeature)
 
       const wiggumSuccess = await runAgentWithEvents(
@@ -384,7 +384,7 @@ export async function runRalphLoop(
       const rejected = await checkSignal(workdir, "rejected")
 
       log("ralph", "Wiggum decision", { featureId: nextFeature.id, approved, rejected })
-      callbacks.onWiggumComplete(nextFeature.id, approved)
+      callbacks.onWiggumComplete(iteration, nextFeature.id, approved)
 
       let iterationPassed: boolean | null = null
 

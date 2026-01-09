@@ -42,18 +42,12 @@ function createLoopCallbacks(
         text: `iteration ${iteration}: ${featureId}`,
         timestamp: Date.now(),
       }
-      const spinner: ToolEvent = {
-        iteration,
-        type: "spinner",
-        text: "looping...",
-        timestamp: Date.now(),
-      }
       setState((prev) => ({
         ...prev,
         execute: {
           ...prev.execute,
           isIdle: false,
-          events: [...prev.execute.events, separator, spinner],
+          events: [...prev.execute.events, separator],
         },
       }))
     },
@@ -82,39 +76,55 @@ function createLoopCallbacks(
         }
       })
     },
-    onRalphStart: () => {
+    onRalphStart: (iteration) => {
+      const spinner: ToolEvent = {
+        iteration,
+        type: "spinner",
+        text: "Ralph is working...",
+        timestamp: Date.now(),
+      }
       setState((prev) => ({
         ...prev,
         execute: {
           ...prev.execute,
           currentAgent: "ralph",
+          events: [...prev.execute.events, spinner],
         },
       }))
     },
-    onRalphComplete: () => {
+    onRalphComplete: (iteration) => {
       setState((prev) => ({
         ...prev,
         execute: {
           ...prev.execute,
           currentAgent: "idle",
+          events: prev.execute.events.filter((e) => !(e.type === "spinner" && e.iteration === iteration)),
         },
       }))
     },
-    onWiggumStart: () => {
+    onWiggumStart: (iteration) => {
+      const spinner: ToolEvent = {
+        iteration,
+        type: "spinner",
+        text: "Chief Wiggum is keeping him in line...",
+        timestamp: Date.now(),
+      }
       setState((prev) => ({
         ...prev,
         execute: {
           ...prev.execute,
           currentAgent: "wiggum",
+          events: [...prev.execute.events, spinner],
         },
       }))
     },
-    onWiggumComplete: () => {
+    onWiggumComplete: (iteration) => {
       setState((prev) => ({
         ...prev,
         execute: {
           ...prev.execute,
           currentAgent: "idle",
+          events: prev.execute.events.filter((e) => !(e.type === "spinner" && e.iteration === iteration)),
         },
       }))
     },

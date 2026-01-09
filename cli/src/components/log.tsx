@@ -94,7 +94,7 @@ function ToolEventItem(props: { event: ToolEvent; workdir: string }) {
   const iconColor = () => getToolColor(props.event.icon)
 
   return (
-    <box width="100%" flexDirection="row">
+    <box width="100%" flexDirection="row" paddingLeft={1}>
       <text fg={iconColor()}>{icon()}</text>
       <text fg={colors.fg}> {props.event.text}</text>
     </box>
