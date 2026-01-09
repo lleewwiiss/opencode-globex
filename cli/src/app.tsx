@@ -11,7 +11,7 @@ import { InterviewScreen } from "./components/screens/interview.js"
 import { ConfirmScreen } from "./components/screens/confirm.js"
 import { colors } from "./components/colors.js"
 import type { Phase, ToolEvent } from "./state/types.js"
-import type { FileReference } from "./state/schema.js"
+import type { FileReference, InterviewRound, InterviewAnswersPayload } from "./state/schema.js"
 
 export type Screen = "init" | "background" | "interview" | "confirm" | "execute"
 
@@ -37,6 +37,7 @@ export interface InterviewState {
   questionsAsked: number
   startedAt: number
   isWaitingForAgent: boolean
+  currentRound: InterviewRound | null
 }
 
 export interface ExecuteState {
@@ -76,7 +77,7 @@ export interface AppCallbacks {
   onQuit: () => void
   onContinue: (projectId: string) => void
   onNewProject: (description: string, refs: FileReference[]) => void
-  onInterviewAnswer?: (answer: string) => void
+  onInterviewAnswer?: (payload: InterviewAnswersPayload) => void
   onConfirmExecute?: () => void
   onKeyboardEvent?: () => void
   onPauseToggle?: (paused: boolean) => void
@@ -116,6 +117,7 @@ export function createInitialAppState(screen: Screen = "init"): AppState {
       questionsAsked: 0,
       startedAt: Date.now(),
       isWaitingForAgent: true,
+      currentRound: null,
     },
     confirm: {
       projectName: "",

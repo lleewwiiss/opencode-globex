@@ -128,37 +128,80 @@ Use LSP tools to verify claims during interview:
 - **Stop when**: No new gaps found for 2 consecutive rounds OR you have sufficient clarity to proceed
 
 ## Output Format
-Use markdown - we render headers, bold, bullets, blockquotes, and code blocks.
-Number questions with **1.** format for tracking.
 
-Example:
-## Round 1: Architecture
-**1. Question title here**
-> Quote from the artifact if relevant
-The actual question you want answered?
+You MUST respond ONLY with a single JSON object. No markdown fences, no commentary before or after.
 
-**2. Another question**
-- Bullet point context
-- More context
-What specifically are you asking?
+### JSON Schema
 
-## Rules
+{
+  "phase": "research_interview",
+  "round": <number>,                    // starts at 1, increments each round
+  "roundTitle": "<string>",             // e.g., "Round 1: Architecture & Goals"
+  "questions": [
+    {
+      "id": "<string>",                 // format: "r{round}-q{n}", e.g., "r1-q1"
+      "title": "<string>",              // short label for tab display (2-4 words)
+      "prompt": "<string>",             // full question text (markdown supported)
+      "type": "text" | "choice",        // choice includes "type your own" option
+      "required": <boolean>,            // must be answered before round submission
+      "severity": "high" | "medium" | "low",
+      "reference": {                    // optional - include when citing artifact
+        "file": "<string>",             // e.g., "research.md"
+        "lines": "<string>",            // e.g., "45-60"
+        "quote": "<string>"             // short excerpt for inline display
+      },
+      "options": [                      // only for type: "choice"
+        {
+          "label": "<string>",
+          "description": "<string>"     // optional clarification
+        }
+      ],
+      "hint": "<string>",               // optional placeholder text
+      "default": "<string>"             // optional suggested answer
+    }
+  ],
+  "totalQuestionsAskedSoFar": <number>, // running count across all rounds
+  "complete": <boolean>,                // true ONLY when convergence reached
+  "completionReason": "<string>"        // brief explanation when complete
+}
+
+### Rules
+- Ask 2-4 questions per round
+- Use "choice" type when there are clear predefined answers
+- Use "text" type for open-ended questions (most common)
+- Mark questions as "high" severity if they block understanding
+- Include file references when citing specific parts of artifacts
+- Set complete: true only after minimum 5 questions AND no new gaps for 2 rounds
+- Do NOT include literal "INTERVIEW_COMPLETE" text anywhere
 - Ask the HUMAN, don't answer yourself
 - Accept verbal explanations - don't demand file:line citations from the human
 - Use LSP/Read tools if YOU need to verify something they claim
 - Challenge both directions: probe their answers AND reconsider if they challenge you
 
-## Signaling Completion
-When the interview is complete (convergence reached):
+### Input Format
+
+You will receive user answers as JSON:
+
+{
+  "phase": "research_interview",
+  "round": <number>,
+  "answers": [
+    {
+      "questionId": "<string>",
+      "answer": "<string>",
+      "isCustom": <boolean>            // true if user typed instead of selecting option
+    }
+  ]
+}
+
+### On Completion
+
+When complete is true:
 1. Apply any small, surgical refinements to research.md using tools (e.g., create_file)
    - Only clarify or adjust based on human's answers
    - Do NOT rewrite the entire document or change its structure
    - Add clarifications to relevant sections, update edge cases, fix any errors identified
-2. In the same final response, after all tool calls, output this exact marker on its own line as the LAST thing:
-
-INTERVIEW_COMPLETE
-
-This marker triggers the transition to the next phase. Without it, the interview will not end.`
+2. Then output the final JSON with complete: true and completionReason explaining why`
 
 export const PLAN_PROMPT = `Create detailed implementation plan from approved research.
 
@@ -319,38 +362,81 @@ Group questions by implementation concerns:
 - **Stop when**: No new gaps found for 2 consecutive rounds OR you have sufficient clarity to proceed
 
 ## Output Format
-Use markdown - we render headers, bold, bullets, blockquotes, and code blocks.
-Number questions with **1.** format for tracking.
 
-Example:
-## Round 1: Design Options
-**1. Question title here**
-> Quote from the plan if relevant
-The actual question you want answered?
+You MUST respond ONLY with a single JSON object. No markdown fences, no commentary before or after.
 
-**2. Another question**
-- Bullet point context
-- More context
-What specifically are you asking?
+### JSON Schema
 
-## Rules
+{
+  "phase": "plan_interview",
+  "round": <number>,                    // starts at 1, increments each round
+  "roundTitle": "<string>",             // e.g., "Round 1: Design Options"
+  "questions": [
+    {
+      "id": "<string>",                 // format: "r{round}-q{n}", e.g., "r1-q1"
+      "title": "<string>",              // short label for tab display (2-4 words)
+      "prompt": "<string>",             // full question text (markdown supported)
+      "type": "text" | "choice",        // choice includes "type your own" option
+      "required": <boolean>,            // must be answered before round submission
+      "severity": "high" | "medium" | "low",
+      "reference": {                    // optional - include when citing artifact
+        "file": "<string>",             // e.g., "plan.md"
+        "lines": "<string>",            // e.g., "45-60"
+        "quote": "<string>"             // short excerpt for inline display
+      },
+      "options": [                      // only for type: "choice"
+        {
+          "label": "<string>",
+          "description": "<string>"     // optional clarification
+        }
+      ],
+      "hint": "<string>",               // optional placeholder text
+      "default": "<string>"             // optional suggested answer
+    }
+  ],
+  "totalQuestionsAskedSoFar": <number>, // running count across all rounds
+  "complete": <boolean>,                // true ONLY when convergence reached
+  "completionReason": "<string>"        // brief explanation when complete
+}
+
+### Rules
+- Ask 2-4 questions per round
+- Use "choice" type when there are clear predefined answers
+- Use "text" type for open-ended questions (most common)
+- Mark questions as "high" severity if they block understanding
+- Include file references when citing specific parts of artifacts
+- Set complete: true only after minimum 5 questions AND no new gaps for 2 rounds
+- Do NOT include literal "INTERVIEW_COMPLETE" text anywhere
 - Ask the HUMAN, don't answer yourself
 - Accept verbal explanations - don't demand file:line citations from the human
 - Use LSP/Read tools if YOU need to verify something they claim
 - Challenge both directions: probe their answers AND reconsider if they challenge you
 - Note any human overrides of your recommendations
 
-## Signaling Completion
-When the interview is complete (convergence reached):
+### Input Format
+
+You will receive user answers as JSON:
+
+{
+  "phase": "plan_interview",
+  "round": <number>,
+  "answers": [
+    {
+      "questionId": "<string>",
+      "answer": "<string>",
+      "isCustom": <boolean>            // true if user typed instead of selecting option
+    }
+  ]
+}
+
+### On Completion
+
+When complete is true:
 1. Apply any small, surgical refinements to plan.md using tools (e.g., create_file)
    - Only clarify or adjust based on human's answers
    - Do NOT redesign the solution or introduce a completely new plan
    - Note any human overrides in the plan
-2. In the same final response, after all tool calls, output this exact marker on its own line as the LAST thing:
-
-INTERVIEW_COMPLETE
-
-This marker triggers the transition to the next phase. Without it, the interview will not end.`
+2. Then output the final JSON with complete: true and completionReason explaining why`
 
 export const FEATURES_PROMPT = `Generate atomic feature list from approved plan.
 

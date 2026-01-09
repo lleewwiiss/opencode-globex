@@ -113,3 +113,85 @@ export const FileReferenceSchema = Schema.Struct({
   displayName: Schema.optional(Schema.String),
 })
 export type FileReference = Schema.Schema.Type<typeof FileReferenceSchema>
+
+// Interview Schemas (shared by research_interview and plan_interview)
+
+export const InterviewPhaseSchema = Schema.Union(
+  Schema.Literal("research_interview"),
+  Schema.Literal("plan_interview")
+)
+export type InterviewPhase = Schema.Schema.Type<typeof InterviewPhaseSchema>
+
+export const QuestionTypeSchema = Schema.Union(
+  Schema.Literal("text"),
+  Schema.Literal("choice")
+)
+export type QuestionType = Schema.Schema.Type<typeof QuestionTypeSchema>
+
+export const SeveritySchema = Schema.Union(
+  Schema.Literal("high"),
+  Schema.Literal("medium"),
+  Schema.Literal("low")
+)
+export type Severity = Schema.Schema.Type<typeof SeveritySchema>
+
+export const InterviewOptionSchema = Schema.Struct({
+  label: Schema.String,
+  description: Schema.optional(Schema.String),
+})
+export type InterviewOption = Schema.Schema.Type<typeof InterviewOptionSchema>
+
+export const InterviewFileRefSchema = Schema.Struct({
+  file: Schema.String,
+  lines: Schema.String,
+  quote: Schema.String,
+})
+export type InterviewFileRef = Schema.Schema.Type<typeof InterviewFileRefSchema>
+
+export const InterviewQuestionSchema = Schema.Struct({
+  id: Schema.String,
+  title: Schema.String,
+  prompt: Schema.String,
+  type: QuestionTypeSchema,
+  required: Schema.Boolean,
+  severity: SeveritySchema,
+  reference: Schema.optional(InterviewFileRefSchema),
+  options: Schema.optional(Schema.Array(InterviewOptionSchema)),
+  hint: Schema.optional(Schema.String),
+  default: Schema.optional(Schema.String),
+})
+export type InterviewQuestion = Schema.Schema.Type<typeof InterviewQuestionSchema>
+
+export const InterviewRoundSchema = Schema.Struct({
+  phase: InterviewPhaseSchema,
+  round: Schema.Number,
+  roundTitle: Schema.String,
+  questions: Schema.Array(InterviewQuestionSchema),
+  totalQuestionsAskedSoFar: Schema.Number,
+  complete: Schema.Boolean,
+  completionReason: Schema.optional(Schema.String),
+})
+export type InterviewRound = Schema.Schema.Type<typeof InterviewRoundSchema>
+
+export const InterviewAnswerSchema = Schema.Struct({
+  questionId: Schema.String,
+  answer: Schema.String,
+  isCustom: Schema.Boolean,
+})
+export type InterviewAnswer = Schema.Schema.Type<typeof InterviewAnswerSchema>
+
+export const InterviewAnswersPayloadSchema = Schema.Struct({
+  phase: InterviewPhaseSchema,
+  round: Schema.Number,
+  answers: Schema.Array(InterviewAnswerSchema),
+})
+export type InterviewAnswersPayload = Schema.Schema.Type<typeof InterviewAnswersPayloadSchema>
+
+export function decodeInterviewRound(raw: string): InterviewRound {
+  const parsed = JSON.parse(raw)
+  return Schema.decodeUnknownSync(InterviewRoundSchema)(parsed)
+}
+
+export function encodeInterviewAnswers(payload: InterviewAnswersPayload): string {
+  return JSON.stringify(payload)
+}

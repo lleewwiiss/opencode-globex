@@ -15,7 +15,7 @@ import { runFeaturesPhase } from "./phases/features.js"
 import { getProgressStats, getFeatureCategories } from "./features/manager.js"
 import { log } from "./util/log.js"
 import type { Phase, ToolEvent } from "./state/types.js"
-import type { FileReference } from "./state/schema.js"
+import type { FileReference, InterviewAnswersPayload } from "./state/schema.js"
 import { Effect } from "effect"
 
 const DEFAULT_MODEL = "anthropic/claude-opus-4-5"
@@ -245,7 +245,7 @@ async function transitionToResearch(
   model: string,
   variant: string,
   signal: AbortSignal
-): Promise<{ submitAnswer: (answer: string) => Promise<boolean> }> {
+): Promise<{ submitAnswer: (payload: InterviewAnswersPayload) => Promise<boolean> }> {
   setState((prev) => ({
     ...prev,
     screen: "background",
@@ -320,7 +320,7 @@ async function transitionToPlan(
   model: string,
   variant: string,
   signal: AbortSignal
-): Promise<{ submitAnswer: (answer: string) => Promise<boolean> }> {
+): Promise<{ submitAnswer: (payload: InterviewAnswersPayload) => Promise<boolean> }> {
   setState((prev) => ({
     ...prev,
     screen: "background",
@@ -568,7 +568,7 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
     })
 
     // Interview answer handler - set when interview phase starts
-    let interviewSubmitAnswer: ((answer: string) => Promise<boolean>) | null = null
+    let interviewSubmitAnswer: ((payload: InterviewAnswersPayload) => Promise<boolean>) | null = null
     
     // Track current project for phase transitions
     let currentProjectId: string | null = null
@@ -605,9 +605,9 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
       onNewProject: (description, refs) => {
         if (resolveAction) resolveAction({ type: "new", description, refs })
       },
-      onInterviewAnswer: async (answer) => {
+      onInterviewAnswer: async (payload) => {
         if (interviewSubmitAnswer) {
-          const complete = await interviewSubmitAnswer(answer)
+          const complete = await interviewSubmitAnswer(payload)
           if (complete && currentPhase) {
             await handlePhaseComplete(currentPhase)
           }

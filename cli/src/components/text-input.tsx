@@ -11,6 +11,7 @@ export interface TextInputProps {
   multiline?: boolean
   height?: number
   borderColor?: string
+  clearOnSubmit?: boolean
 }
 
 /**
@@ -27,7 +28,9 @@ export function TextInput(props: TextInputProps) {
     const trimmed = text.trim()
     if (trimmed.length > 0 && props.onSubmit) {
       props.onSubmit(trimmed)
-      textareaRef.clear()
+      if (props.clearOnSubmit ?? true) {
+        textareaRef.clear()
+      }
     }
   }
 
