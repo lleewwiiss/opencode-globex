@@ -121,7 +121,9 @@ export const GitServiceLive = Layer.effect(
 
     const removeWorktree = (workdir: string, path: string): Effect.Effect<void, GitError> =>
       Effect.gen(function* () {
-        yield* runGit(["worktree", "remove", path], workdir)
+        yield* runGit(["worktree", "remove", "--force", path], workdir).pipe(
+          Effect.catchAll(() => Effect.void)
+        )
       })
 
     const listWorktrees = (workdir: string): Effect.Effect<Worktree[], GitError> =>
