@@ -197,6 +197,34 @@ function createLoopCallbacks(
         },
       }))
     },
+    onToolEvent: (event) => {
+      setState((prev) => {
+        const events = [...prev.execute.events]
+        const spinnerIndex = events.findIndex((e) => e.type === "spinner")
+        if (spinnerIndex !== -1) {
+          events.splice(spinnerIndex, 0, event)
+        } else {
+          events.push(event)
+        }
+        return {
+          ...prev,
+          execute: {
+            ...prev.execute,
+            events,
+          },
+        }
+      })
+    },
+    onIdleChanged: (isIdle, agent) => {
+      setState((prev) => ({
+        ...prev,
+        execute: {
+          ...prev.execute,
+          isIdle,
+          currentAgent: isIdle ? "idle" : agent,
+        },
+      }))
+    },
   }
 }
 

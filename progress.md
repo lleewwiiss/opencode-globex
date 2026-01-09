@@ -1,5 +1,36 @@
 # Progress
 
+## Feature: registry-service-core
+
+### Status: complete
+
+### Changes Made
+- **cli/src/state/registry.ts**: Created new file with RegistryService following persistence.ts pattern
+
+### Implementation
+- `RegistryEntry` interface: name, repoPath, phase, worktreePath?, branchName?, createdAt, updatedAt
+- `Registry` interface: projects: Record<string, RegistryEntry>
+- `RegistryReadError` and `RegistryWriteError` tagged errors (Schema.TaggedError)
+- `RegistryService` with Context.Tag, `RegistryServiceLive` with Layer.effect
+- CRUD methods: loadRegistry, saveRegistry, getProject, upsertProject, removeProject, listProjects, listProjectsForRepo
+- Convenience exports with pre-wired RegistryLayer (same pattern as persistence.ts lines 106-134)
+- Uses `~/.globex/registry.json` via `os.homedir()` + path.join
+
+### Verification
+- Build: ✓
+- Tests: ✓ (381 pass, 37 unrelated failures from decimal.js package resolution in references/)
+- Lint: ✓ (5 warnings, 0 errors - none in registry.ts)
+
+### Acceptance Criteria
+- [x] registry.ts file created at cli/src/state/registry.ts
+- [x] RegistryEntry interface with name, repoPath, phase, worktreePath, branchName, createdAt, updatedAt
+- [x] Registry interface with projects: Record<string, RegistryEntry>
+- [x] RegistryReadError and RegistryWriteError tagged errors
+- [x] RegistryService with loadRegistry, saveRegistry, getProject, upsertProject, removeProject, listProjects, listProjectsForRepo
+- [x] Uses ~/.globex/registry.json for storage
+
+---
+
 ## Feature: state-workspace-schema
 
 ### Status: complete

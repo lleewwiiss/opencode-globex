@@ -1,5 +1,6 @@
 import type { OpencodeClient } from "@opencode-ai/sdk/v2/client"
 import type { Feature } from "../state/schema.js"
+import type { ToolEvent } from "../state/types.js"
 import { getNextFeature, updateFeature } from "../features/manager.js"
 import { checkSignal, clearSignals } from "./signals.js"
 import { parseModel, abortSession } from "../opencode/session.js"
@@ -7,6 +8,15 @@ import { commitChanges, getHeadHash, getCommitsSince, getDiffStatsSince } from "
 import { readFeatures, writeFeatures, readRejectionInfo } from "../state/features-persistence.js"
 import { RALPH_PROMPT, WIGGUM_PROMPT } from "../agents/prompts.js"
 import { log } from "../util/log.js"
+
+type AgentName = "ralph" | "wiggum"
+
+interface AgentEventOptions {
+  iteration: number
+  agent: AgentName
+  onToolEvent?: (event: ToolEvent) => void
+  onIdleChanged?: (isIdle: boolean, agent: AgentName) => void
+}
 
 const MAX_ATTEMPTS = 3
 const PAUSE_CHECK_INTERVAL_MS = 1000
@@ -41,6 +51,8 @@ export interface RalphLoopCallbacks {
   onError: (error: Error) => void
   onCommitsUpdated: (commits: number) => void
   onDiffUpdated: (linesAdded: number, linesRemoved: number) => void
+  onToolEvent?: (event: ToolEvent) => void
+  onIdleChanged?: (isIdle: boolean, agent: AgentName) => void
 }
 
 export interface RalphLoopResult {
@@ -134,9 +146,12 @@ async function runAgentWithEvents(
   client: OpencodeClient,
   prompt: string,
   model: string,
+  eventOptions: AgentEventOptions,
   signal?: AbortSignal
 ): Promise<boolean> {
-  log("ralph", "Creating session...")
+  const { iteration, agent, onToolEvent, onIdleChanged } = eventOptions
+
+  log("ralph", "Creating session...", { agent })
   const sessionResult = await client.session.create()
   if (!sessionResult.data?.id) {
     log("ralph", "ERROR: Failed to create session")
@@ -144,13 +159,16 @@ async function runAgentWithEvents(
   }
   const sessionId = sessionResult.data.id
   const { providerID, modelID } = parseModel(model)
-  log("ralph", "Session created", { sessionId, providerID, modelID })
+  log("ralph", "Session created", { sessionId, providerID, modelID, agent })
 
   log("ralph", "Subscribing to events...")
   const events = await client.event.subscribe()
 
   let promptSent = false
   let success = false
+  let receivedFirstToolEvent = false
+
+  onIdleChanged?.(true, agent)
 
   try {
     for await (const event of events.stream) {
@@ -171,6 +189,34 @@ async function runAgentWithEvents(
         }).catch((e) => log("ralph", "Prompt error", { error: String(e) }))
 
         continue
+      }
+
+      // Tool events - surface to TUI
+      if (event.type === "message.part.updated") {
+        const props = event.properties as { part?: { sessionID?: string; type?: string; tool?: string; state?: { status?: string; title?: string; input?: Record<string, unknown>; time?: { end?: number } } } }
+        const part = props.part
+        if (!part || part.sessionID !== sessionId) continue
+
+        if (part.type === "tool" && part.state?.status === "completed") {
+          if (!receivedFirstToolEvent) {
+            receivedFirstToolEvent = true
+            onIdleChanged?.(false, agent)
+          }
+
+          const toolName = part.tool ?? "unknown"
+          const title = part.state.title ?? 
+            (part.state.input && Object.keys(part.state.input).length > 0
+              ? JSON.stringify(part.state.input)
+              : toolName)
+
+          onToolEvent?.({
+            iteration,
+            type: "tool",
+            icon: toolName,
+            text: ` ${title}`,
+            timestamp: part.state.time?.end ?? Date.now(),
+          })
+        }
       }
 
       // Session idle - agent finished
@@ -282,7 +328,18 @@ export async function runRalphLoop(
       callbacks.onRalphStart(nextFeature.id)
       const ralphPrompt = buildRalphPrompt(nextFeature, feedback)
 
-      const ralphSuccess = await runAgentWithEvents(client, ralphPrompt, model, signal)
+      const ralphSuccess = await runAgentWithEvents(
+        client,
+        ralphPrompt,
+        model,
+        {
+          iteration,
+          agent: "ralph",
+          onToolEvent: callbacks.onToolEvent,
+          onIdleChanged: callbacks.onIdleChanged,
+        },
+        signal
+      )
       if (!ralphSuccess) {
         if (signal?.aborted) break
         callbacks.onError(new Error(`Ralph session failed for feature ${nextFeature.id}`))
@@ -304,7 +361,18 @@ export async function runRalphLoop(
       callbacks.onWiggumStart(nextFeature.id)
       const wiggumPrompt = buildWiggumPrompt(nextFeature)
 
-      const wiggumSuccess = await runAgentWithEvents(client, wiggumPrompt, model, signal)
+      const wiggumSuccess = await runAgentWithEvents(
+        client,
+        wiggumPrompt,
+        model,
+        {
+          iteration,
+          agent: "wiggum",
+          onToolEvent: callbacks.onToolEvent,
+          onIdleChanged: callbacks.onIdleChanged,
+        },
+        signal
+      )
       if (!wiggumSuccess) {
         if (signal?.aborted) break
         callbacks.onError(new Error(`Wiggum session failed for feature ${nextFeature.id}`))

@@ -74,6 +74,15 @@ export function Header(props: HeaderProps) {
     return Math.round((props.featuresComplete / props.totalFeatures) * 100)
   })
 
+  const BAR_SEGMENTS = 10
+  const filledCount = createMemo(() =>
+    props.totalFeatures > 0
+      ? Math.round((props.featuresComplete / props.totalFeatures) * BAR_SEGMENTS)
+      : 0
+  )
+  const filledBar = createMemo(() => "■".repeat(filledCount()))
+  const emptyBar = createMemo(() => "□".repeat(BAR_SEGMENTS - filledCount()))
+
   const etaText = createMemo(() => {
     if (!props.eta || props.eta <= 0) return null
     return formatDuration(props.eta)
@@ -100,12 +109,13 @@ export function Header(props: HeaderProps) {
       <Show when={progress()}>
         <text fg={colors.fgMuted}>{" · "}</text>
         <text fg={colors.fg}>{progress()}</text>
-        <text fg={colors.fgMuted}> features</text>
-        <text fg={colors.fgMuted}>{" ("}</text>
+        <text fg={colors.fgMuted}> features </text>
+        <text fg={colors.green}>{filledBar()}</text>
+        <text fg={colors.fgMuted}>{emptyBar()}</text>
+        <text fg={colors.fgMuted}>{" "}</text>
         <text fg={progressPct() === 100 ? colors.green : colors.yellow}>
           {progressPct()}%
         </text>
-        <text fg={colors.fgMuted}>{")"}</text>
       </Show>
 
       <box flexGrow={1} />
