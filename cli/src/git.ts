@@ -34,10 +34,16 @@ export interface MergeResult {
   commitHash: string | null
 }
 
+export interface DiffStatsSince {
+  added: number
+  removed: number
+}
+
 export class GitService extends Context.Tag("GitService")<GitService, {
   readonly getHeadHash: (workdir: string) => Effect.Effect<string, GitError>
   readonly getCommitsSince: (workdir: string, hash: string) => Effect.Effect<Commit[], GitError>
   readonly getDiffStats: (workdir: string) => Effect.Effect<DiffStats, GitError>
+  readonly getDiffStatsSince: (workdir: string, sinceHash: string) => Effect.Effect<DiffStatsSince, GitError>
   readonly commitChanges: (workdir: string, message: string) => Effect.Effect<string, GitError>
   readonly createWorktree: (workdir: string, path: string, branch: string) => Effect.Effect<Worktree, GitError>
   readonly removeWorktree: (workdir: string, path: string) => Effect.Effect<void, GitError>
@@ -103,6 +109,25 @@ export const GitServiceLive = Layer.effect(
         if (deletionsMatch) deletions = parseInt(deletionsMatch[1], 10)
 
         return { filesChanged: files.length, insertions, deletions, files }
+      })
+
+    const getDiffStatsSince = (workdir: string, sinceHash: string): Effect.Effect<DiffStatsSince, GitError> =>
+      Effect.gen(function* () {
+        const output = yield* runGit(["diff", "--numstat", `${sinceHash}..HEAD`], workdir).pipe(
+          Effect.catchAll(() => Effect.succeed(""))
+        )
+
+        let added = 0
+        let removed = 0
+
+        for (const line of output.trim().split("\n")) {
+          if (!line) continue
+          const [add, rem] = line.split("\t")
+          if (add !== "-") added += parseInt(add, 10) || 0
+          if (rem !== "-") removed += parseInt(rem, 10) || 0
+        }
+
+        return { added, removed }
       })
 
     const commitChanges = (workdir: string, message: string): Effect.Effect<string, GitError> =>
@@ -180,7 +205,7 @@ export const GitServiceLive = Layer.effect(
         return { ...result, conflicts }
       })
 
-    return { getHeadHash, getCommitsSince, getDiffStats, commitChanges, createWorktree, removeWorktree, listWorktrees, mergeWorktree }
+    return { getHeadHash, getCommitsSince, getDiffStats, getDiffStatsSince, commitChanges, createWorktree, removeWorktree, listWorktrees, mergeWorktree }
   })
 )
 
@@ -205,6 +230,12 @@ export const getDiffStatsEffect = (workdir: string) =>
   Effect.gen(function* () {
     const service = yield* GitService
     return yield* service.getDiffStats(workdir)
+  }).pipe(Effect.provide(GitLayer))
+
+export const getDiffStatsSinceEffect = (workdir: string, sinceHash: string) =>
+  Effect.gen(function* () {
+    const service = yield* GitService
+    return yield* service.getDiffStatsSince(workdir, sinceHash)
   }).pipe(Effect.provide(GitLayer))
 
 export const commitChangesEffect = (workdir: string, message: string) =>
@@ -245,6 +276,9 @@ export const getCommitsSince = async (workdir: string, hash: string): Promise<Co
 
 export const getDiffStats = async (workdir: string): Promise<DiffStats> =>
   Effect.runPromise(getDiffStatsEffect(workdir))
+
+export const getDiffStatsSince = async (workdir: string, sinceHash: string): Promise<DiffStatsSince> =>
+  Effect.runPromise(getDiffStatsSinceEffect(workdir, sinceHash))
 
 export const commitChanges = async (workdir: string, message: string): Promise<string> =>
   Effect.runPromise(commitChangesEffect(workdir, message))

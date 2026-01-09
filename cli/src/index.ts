@@ -176,6 +176,16 @@ function createLoopCallbacks(
         },
       }))
     },
+    onDiffUpdated: (linesAdded, linesRemoved) => {
+      setState((prev) => ({
+        ...prev,
+        execute: {
+          ...prev.execute,
+          linesAdded,
+          linesRemoved,
+        },
+      }))
+    },
   }
 }
 

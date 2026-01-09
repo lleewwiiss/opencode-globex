@@ -3,7 +3,7 @@ import type { Feature } from "../state/schema.js"
 import { getNextFeature, updateFeature } from "../features/manager.js"
 import { checkSignal, clearSignals } from "./signals.js"
 import { parseModel, abortSession } from "../opencode/session.js"
-import { commitChanges, getHeadHash, getCommitsSince, getDiffStats } from "../git.js"
+import { commitChanges, getHeadHash, getCommitsSince, getDiffStatsSince } from "../git.js"
 import { readFeatures, writeFeatures, readRejectionInfo } from "../state/features-persistence.js"
 import { RALPH_PROMPT, WIGGUM_PROMPT } from "../agents/prompts.js"
 import { log } from "../util/log.js"
@@ -314,12 +314,15 @@ export async function runRalphLoop(
 
       if (approved) {
         // Commit changes and update feature as passed (clear rejection feedback)
-        log("ralph", "Chief Wiggum APPROVED", { featureId: nextFeature.id })
+        log("ralph", "Feature PASSED", { featureId: nextFeature.id, iteration })
         await commitChanges(workdir, `feat(${nextFeature.id}): implement feature`)
         
-        // Update commit count in TUI
+        // Update commit count and diff stats in TUI
         const commits = await getCommitsSince(workdir, initialCommitHash)
+        const diffStats = await getDiffStatsSince(workdir, initialCommitHash)
         callbacks.onCommitsUpdated(commits.length)
+        callbacks.onDiffUpdated(diffStats.added, diffStats.removed)
+        log("ralph", "Stats updated", { commits: commits.length, added: diffStats.added, removed: diffStats.removed })
         
         const updatedFeatures = updateFeature(features, nextFeature.id, {
           passes: true,
@@ -334,7 +337,7 @@ export async function runRalphLoop(
         const rejection = await readRejectionInfo(workdir)
         const reasons = rejection?.reasons ?? ["Unknown reason"]
         
-        log("ralph", "Chief Wiggum REJECTED", { featureId: nextFeature.id, attempt: newAttempts, reasons })
+        log("ralph", "Feature FAILED", { featureId: nextFeature.id, attempt: newAttempts, reasons, iteration })
         const updatedFeatures = updateFeature(features, nextFeature.id, {
           attempts: newAttempts,
           lastRejectionFeedback: reasons,

@@ -35,6 +35,7 @@ const createMockCallbacks = (): RalphLoopCallbacks => ({
   onComplete: mock(() => {}),
   onError: mock(() => {}),
   onCommitsUpdated: mock(() => {}),
+  onDiffUpdated: mock(() => {}),
 })
 
 // Create async generator that simulates SSE event stream
@@ -129,7 +130,10 @@ describe("cli/loop/ralph", () => {
       )
       const clearSpy = spyOn(signals, "clearSignals").mockResolvedValue()
 
-      // Mock git commit
+      // Mock git functions
+      spyOn(git, "getHeadHash").mockResolvedValue("abc123")
+      spyOn(git, "getCommitsSince").mockResolvedValue([])
+      spyOn(git, "getDiffStatsSince").mockResolvedValue({ added: 0, removed: 0 })
       const commitSpy = spyOn(git, "commitChanges").mockResolvedValue(
         "abc123def"
       )
@@ -173,6 +177,9 @@ describe("cli/loop/ralph", () => {
       const client = createMockClient()
       const callbacks = createMockCallbacks()
 
+      // Mock git functions
+      spyOn(git, "getHeadHash").mockResolvedValue("abc123")
+
       const ctx: RalphLoopContext = {
         client: client as any,
         workdir: testDir,
@@ -210,6 +217,11 @@ describe("cli/loop/ralph", () => {
         }
       )
       const clearSpy = spyOn(signals, "clearSignals").mockResolvedValue()
+
+      // Mock git functions
+      spyOn(git, "getHeadHash").mockResolvedValue("abc123")
+      spyOn(git, "getCommitsSince").mockResolvedValue([])
+      spyOn(git, "getDiffStatsSince").mockResolvedValue({ added: 0, removed: 0 })
 
       // Write rejection info
       await fs.writeFile(
@@ -256,6 +268,9 @@ describe("cli/loop/ralph", () => {
       const client = createMockClient()
       const callbacks = createMockCallbacks()
 
+      // Mock git functions
+      spyOn(git, "getHeadHash").mockResolvedValue("abc123")
+
       const ctx: RalphLoopContext = {
         client: client as any,
         workdir: testDir,
@@ -293,6 +308,9 @@ describe("cli/loop/ralph", () => {
       const callbacks = createMockCallbacks()
       const abortController = new AbortController()
 
+      // Mock git functions
+      spyOn(git, "getHeadHash").mockResolvedValue("abc123")
+
       // Create pause file before starting
       await fs.writeFile(path.join(testDir, ".globex-pause"), "")
 
@@ -320,6 +338,9 @@ describe("cli/loop/ralph", () => {
 
       const client = createMockClient()
       const callbacks = createMockCallbacks()
+
+      // Mock git functions
+      spyOn(git, "getHeadHash").mockResolvedValue("abc123")
 
       // Create then immediately remove pause file
       await fs.writeFile(path.join(testDir, ".globex-pause"), "")
@@ -380,6 +401,8 @@ describe("cli/loop/ralph", () => {
       const callbacks = createMockCallbacks()
       const abortController = new AbortController()
 
+      // Mock git functions
+      spyOn(git, "getHeadHash").mockResolvedValue("abc123")
       const clearSpy = spyOn(signals, "clearSignals").mockResolvedValue()
       const checkSpy = spyOn(signals, "checkSignal").mockResolvedValue(false)
 
@@ -432,6 +455,8 @@ describe("cli/loop/ralph", () => {
       const callbacks = createMockCallbacks()
       const abortController = new AbortController()
 
+      // Mock git functions
+      spyOn(git, "getHeadHash").mockResolvedValue("abc123")
       const clearSpy = spyOn(signals, "clearSignals").mockResolvedValue()
       const checkSpy = spyOn(signals, "checkSignal").mockResolvedValue(false)
 
@@ -463,6 +488,8 @@ describe("cli/loop/ralph", () => {
       const callbacks = createMockCallbacks()
       const abortController = new AbortController()
 
+      // Mock git functions
+      spyOn(git, "getHeadHash").mockResolvedValue("abc123")
       const clearSpy = spyOn(signals, "clearSignals").mockResolvedValue()
       const checkSpy = spyOn(signals, "checkSignal").mockImplementation(
         async (_workdir: string, type: signals.SignalType) => {
