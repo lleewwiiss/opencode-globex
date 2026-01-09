@@ -84,18 +84,13 @@ function createLoopCallbacks(
         text: "Ralph",
         timestamp: Date.now(),
       }
-      const spinner: ToolEvent = {
-        iteration,
-        type: "spinner",
-        text: "Ralph is working...",
-        timestamp: Date.now(),
-      }
       setState((prev) => ({
         ...prev,
         execute: {
           ...prev.execute,
           currentAgent: "ralph",
-          events: [...prev.execute.events, label, spinner],
+          isIdle: false,
+          events: [...prev.execute.events, label],
         },
       }))
     },
@@ -117,18 +112,13 @@ function createLoopCallbacks(
         text: "Wiggum",
         timestamp: Date.now(),
       }
-      const spinner: ToolEvent = {
-        iteration,
-        type: "spinner",
-        text: "Chief Wiggum is keeping him in line...",
-        timestamp: Date.now(),
-      }
       setState((prev) => ({
         ...prev,
         execute: {
           ...prev.execute,
           currentAgent: "wiggum",
-          events: [...prev.execute.events, label, spinner],
+          isIdle: false,
+          events: [...prev.execute.events, label],
         },
       }))
     },

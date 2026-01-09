@@ -4,7 +4,9 @@ import { hideBin } from "yargs/helpers"
 import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync } from "fs"
 import { join } from "path"
 import { main } from "../src/index.js"
-import { upsertProject, loadRegistry, getProject, type RegistryEntry } from "../src/state/registry.js"
+import { upsertProject, loadRegistry, getProject, removeProject, type RegistryEntry } from "../src/state/registry.js"
+import { removeWorktree } from "../src/git.js"
+import { rmSync, unlinkSync } from "fs"
 
 const DEFAULT_MODEL = "anthropic/claude-opus-4-5"
 const GLOBEX_DIR = ".globex"
@@ -140,6 +142,80 @@ await yargs(hideBin(process.argv))
           console.log(`cd ${entry.repoPath}`)
         }
       }
+    }
+  )
+  .command(
+    "abandon <project-id>",
+    "Abandon and remove a globex project",
+    (yargs) =>
+      yargs
+        .positional("project-id", {
+          type: "string",
+          describe: "Project ID to abandon",
+          demandOption: true,
+        })
+        .option("force", {
+          alias: "f",
+          type: "boolean",
+          default: false,
+          describe: "Skip confirmation and force removal",
+        }),
+    async (argv) => {
+      const projectId = argv["project-id"] as string
+      const force = argv.force as boolean
+      const entry = await getProject(projectId)
+      
+      if (!entry) {
+        console.error(`Project '${projectId}' not found in registry.`)
+        process.exit(1)
+      }
+      
+      if (!force) {
+        console.log(`Project: ${projectId}`)
+        console.log(`Path: ${entry.worktreePath || entry.repoPath}`)
+        console.log(`Phase: ${entry.phase}`)
+        console.log("")
+        console.log("Run with --force to confirm removal.")
+        return
+      }
+      
+      // Remove worktree if exists
+      if (entry.worktreePath) {
+        console.log(`Removing worktree: ${entry.worktreePath}`)
+        try {
+          await removeWorktree(entry.repoPath, entry.worktreePath)
+        } catch {
+          // Worktree removal failed, try manual cleanup
+          try {
+            rmSync(entry.worktreePath, { recursive: true, force: true })
+          } catch {
+            // Ignore cleanup errors
+          }
+        }
+      }
+      
+      // Remove project directory from .globex/projects
+      const projectDir = join(workdir, GLOBEX_DIR, PROJECTS_DIR, projectId)
+      if (existsSync(projectDir)) {
+        console.log(`Removing project data: ${projectDir}`)
+        rmSync(projectDir, { recursive: true, force: true })
+      }
+      
+      // Remove from registry
+      console.log(`Removing from registry: ${projectId}`)
+      await removeProject(projectId)
+      
+      // Clear active-project if was active
+      const activeProjectId = getActiveProject(workdir)
+      if (activeProjectId === projectId) {
+        const activePath = join(workdir, GLOBEX_DIR, ACTIVE_PROJECT_FILE)
+        if (existsSync(activePath)) {
+          unlinkSync(activePath)
+          console.log("Cleared active project.")
+        }
+      }
+      
+      console.log(`Abandoned project: ${projectId}`)
     }
   )
   .command(

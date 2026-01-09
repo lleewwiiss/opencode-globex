@@ -243,3 +243,39 @@ Follows yargs command pattern from lines 66-127 (status and init commands):
 
 ### Files Changed
 - cli/bin/globex.ts
+
+---
+
+## Feature: cli-abandon-command
+
+### Status: complete
+
+### Changes Made
+- **cli/bin/globex.ts:7-8**: Added `removeProject` import from registry.ts, added `removeWorktree` import from git.ts
+- **cli/bin/globex.ts:9**: Added `rmSync, unlinkSync` imports from fs
+- **cli/bin/globex.ts:147-219**: Added `abandon <project-id>` subcommand
+
+### Implementation
+Feature was already implemented. Verified implementation meets all acceptance criteria:
+
+1. **Confirmation without --force** (lines 173-180): Shows project details and prompts to run with --force
+2. **Worktree removal with --force** (lines 183-195): Calls `removeWorktree()`, falls back to `rmSync()` on error
+3. **Project directory removal** (lines 197-202): Removes `.globex/projects/{projectId}` via `rmSync()`
+4. **Registry removal** (lines 204-206): Calls `removeProject(projectId)` async wrapper
+5. **Active-project clearing** (lines 208-216): Checks if abandoned project was active, removes `active-project` file
+6. **Status messages**: Prints progress at each step and final "Abandoned project:" message
+
+### Verification
+- Build: ✓
+- Tests: ✓ (88 pass)
+- Lint: ✓ (1 pre-existing warning, 0 errors)
+
+### Acceptance Criteria
+- [x] globex abandon <id> shows confirmation without --force
+- [x] globex abandon <id> --force removes worktree if exists
+- [x] Removes project from registry
+- [x] Clears active-project if was active
+- [x] Prints status messages
+
+### Files Changed
+- cli/bin/globex.ts (pre-existing implementation verified)

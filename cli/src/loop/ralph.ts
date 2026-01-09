@@ -15,7 +15,7 @@ interface AgentEventOptions {
   iteration: number
   agent: AgentName
   onToolEvent?: (event: ToolEvent) => void
-  onIdleChanged?: (isIdle: boolean, agent: AgentName) => void
+  onIdleChanged?: (isIdle: boolean, agent: AgentName, iteration: number) => void
 }
 
 const MAX_ATTEMPTS = 3
@@ -52,7 +52,7 @@ export interface RalphLoopCallbacks {
   onCommitsUpdated: (commits: number) => void
   onDiffUpdated: (linesAdded: number, linesRemoved: number) => void
   onToolEvent?: (event: ToolEvent) => void
-  onIdleChanged?: (isIdle: boolean, agent: AgentName) => void
+  onIdleChanged?: (isIdle: boolean, agent: AgentName, iteration: number) => void
 }
 
 export interface RalphLoopResult {
