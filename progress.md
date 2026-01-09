@@ -279,3 +279,46 @@ Feature was already implemented. Verified implementation meets all acceptance cr
 
 ### Files Changed
 - cli/bin/globex.ts (pre-existing implementation verified)
+
+---
+
+## Feature: cli-workspace-commands
+
+### Status: complete
+
+### Changes Made
+- **cli/bin/globex.ts:7**: Added `listWorktrees` and `Worktree` type imports from git.ts
+- **cli/bin/globex.ts:220-277**: Added `workspace` command group with `list` and `cleanup` subcommands
+
+### Implementation
+Added workspace command group using nested yargs pattern from lines 63-127:
+
+1. **workspace list**: Lists projects with `worktreePath` set in registry
+   - Shows ID, PHASE, WORKTREE PATH columns
+   - Handles "no worktrees" case
+
+2. **workspace cleanup**: Lists completed projects (phase === "complete") with worktrees
+   - Shows ID, WORKTREE PATH columns
+   - Prints guidance to use `globex abandon <id> --force`
+   - Handles "nothing to clean up" case
+
+3. **demandCommand(1)**: Requires subcommand, shows help if missing
+
+### Verification
+- Build: ✓
+- Tests: ✓ (176 pass)
+- Lint: ✓ (1 pre-existing warning, 0 errors)
+- Manual tests:
+  - `globex workspace --help` ✓
+  - `globex workspace list` ✓
+  - `globex workspace cleanup` ✓
+  - `globex workspace` (no subcommand) exits 1 with help ✓
+
+### Acceptance Criteria
+- [x] globex workspace list shows projects with active worktrees
+- [x] globex workspace cleanup shows completed projects with worktrees
+- [x] workspace is a command group with subcommands
+- [x] Proper error handling for no worktrees
+
+### Files Changed
+- cli/bin/globex.ts

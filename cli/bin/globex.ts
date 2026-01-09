@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync } from 
 import { join } from "path"
 import { main } from "../src/index.js"
 import { upsertProject, loadRegistry, getProject, removeProject, type RegistryEntry } from "../src/state/registry.js"
-import { removeWorktree } from "../src/git.js"
+import { removeWorktree, listWorktrees, type Worktree } from "../src/git.js"
 import { rmSync, unlinkSync } from "fs"
 
 const DEFAULT_MODEL = "anthropic/claude-opus-4-5"
@@ -217,6 +217,68 @@ await yargs(hideBin(process.argv))
       
       console.log(`Abandoned project: ${projectId}`)
     }
+  )
+  .command(
+    "workspace",
+    "Manage git worktrees for globex projects",
+    (yargs) =>
+      yargs
+        .command(
+          "list",
+          "List projects with active worktrees",
+          () => {},
+          async () => {
+            const registry = await loadRegistry()
+            const projects = Object.entries(registry.projects)
+            const withWorktrees = projects.filter(([, entry]) => entry.worktreePath)
+            
+            if (withWorktrees.length === 0) {
+              console.log("No projects with active worktrees.")
+              return
+            }
+            
+            console.log("   ID                              PHASE              WORKTREE PATH")
+            console.log("   ─────────────────────────────── ────────────────── ─────────────────────────────")
+            
+            for (const [id, entry] of withWorktrees) {
+              const idCol = id.padEnd(33)
+              const phaseCol = entry.phase.padEnd(18)
+              console.log(`   ${idCol} ${phaseCol} ${entry.worktreePath}`)
+            }
+          }
+        )
+        .command(
+          "cleanup",
+          "List completed projects with worktrees that can be cleaned up",
+          () => {},
+          async () => {
+            const registry = await loadRegistry()
+            const projects = Object.entries(registry.projects)
+            const completed = projects.filter(
+              ([, entry]) => entry.worktreePath && entry.phase === "complete"
+            )
+            
+            if (completed.length === 0) {
+              console.log("No completed projects with worktrees to clean up.")
+              return
+            }
+            
+            console.log("Completed projects with worktrees:")
+            console.log("")
+            console.log("   ID                              WORKTREE PATH")
+            console.log("   ─────────────────────────────── ─────────────────────────────")
+            
+            for (const [id, entry] of completed) {
+              const idCol = id.padEnd(33)
+              console.log(`   ${idCol} ${entry.worktreePath}`)
+            }
+            
+            console.log("")
+            console.log("Run 'globex abandon <id> --force' to remove a project and its worktree.")
+          }
+        )
+        .demandCommand(1, "Please specify a workspace subcommand: list or cleanup"),
+    () => {}
   )
   .command(
     "init <description>",

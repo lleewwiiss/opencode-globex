@@ -168,7 +168,7 @@ async function runAgentWithEvents(
   let success = false
   let receivedFirstToolEvent = false
 
-  onIdleChanged?.(true, agent)
+  onIdleChanged?.(true, agent, iteration)
 
   try {
     for await (const event of events.stream) {
@@ -200,7 +200,7 @@ async function runAgentWithEvents(
         if (part.type === "tool" && part.state?.status === "completed") {
           if (!receivedFirstToolEvent) {
             receivedFirstToolEvent = true
-            onIdleChanged?.(false, agent)
+            onIdleChanged?.(false, agent, iteration)
           }
 
           const toolName = part.tool ?? "unknown"

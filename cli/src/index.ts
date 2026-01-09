@@ -94,15 +94,8 @@ function createLoopCallbacks(
         },
       }))
     },
-    onRalphComplete: (iteration) => {
-      setState((prev) => ({
-        ...prev,
-        execute: {
-          ...prev.execute,
-          currentAgent: "idle",
-          events: prev.execute.events.filter((e) => !(e.type === "spinner" && e.iteration === iteration)),
-        },
-      }))
+    onRalphComplete: () => {
+      // Spinner removal handled by onIdleChanged
     },
     onWiggumStart: (iteration) => {
       const label: ToolEvent = {
@@ -122,15 +115,8 @@ function createLoopCallbacks(
         },
       }))
     },
-    onWiggumComplete: (iteration) => {
-      setState((prev) => ({
-        ...prev,
-        execute: {
-          ...prev.execute,
-          currentAgent: "idle",
-          events: prev.execute.events.filter((e) => !(e.type === "spinner" && e.iteration === iteration)),
-        },
-      }))
+    onWiggumComplete: () => {
+      // Spinner removal handled by onIdleChanged
     },
     onFeatureComplete: () => {
       setState((prev) => ({
@@ -232,16 +218,42 @@ function createLoopCallbacks(
         })
       })
     },
-    onIdleChanged: (isIdle, agent) => {
+    onIdleChanged: (isIdle, agent, iteration) => {
       queueMicrotask(() => {
-        setState((prev) => ({
-          ...prev,
-          execute: {
-            ...prev.execute,
-            isIdle,
-            currentAgent: isIdle ? "idle" : agent,
-          },
-        }))
+        setState((prev) => {
+          if (isIdle) {
+            // Agent finished - remove spinner
+            return {
+              ...prev,
+              execute: {
+                ...prev.execute,
+                isIdle: true,
+                currentAgent: "idle",
+                events: prev.execute.events.filter((e) => !(e.type === "spinner" && e.iteration === iteration)),
+              },
+            }
+          } else {
+            // Agent started producing output - add spinner
+            const spinnerText = agent === "wiggum" 
+              ? "Chief Wiggum is keeping him in line..." 
+              : "Ralph is working..."
+            const spinner: ToolEvent = {
+              iteration,
+              type: "spinner",
+              text: spinnerText,
+              timestamp: Date.now(),
+            }
+            return {
+              ...prev,
+              execute: {
+                ...prev.execute,
+                isIdle: false,
+                currentAgent: agent,
+                events: [...prev.execute.events, spinner],
+              },
+            }
+          }
+        })
       })
     },
   }
