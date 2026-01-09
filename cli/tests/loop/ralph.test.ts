@@ -140,7 +140,8 @@ describe("cli/loop/ralph", () => {
 
       const ctx: RalphLoopContext = {
         client: client as any,
-        workdir: testDir,
+        artifactWorkdir: testDir,
+        codeWorkdir: testDir,
         projectId,
         model: "anthropic/claude-sonnet-4",
         initialCommitHash: "test-initial-hash",
@@ -183,7 +184,8 @@ describe("cli/loop/ralph", () => {
 
       const ctx: RalphLoopContext = {
         client: client as any,
-        workdir: testDir,
+        artifactWorkdir: testDir,
+        codeWorkdir: testDir,
         projectId,
         model: "anthropic/claude-sonnet-4",
         initialCommitHash: "test-initial-hash",
@@ -244,7 +246,8 @@ describe("cli/loop/ralph", () => {
 
       const ctx: RalphLoopContext = {
         client: client as any,
-        workdir: testDir,
+        artifactWorkdir: testDir,
+        codeWorkdir: testDir,
         projectId,
         model: "anthropic/claude-sonnet-4",
         initialCommitHash: "test-initial-hash",
@@ -276,7 +279,8 @@ describe("cli/loop/ralph", () => {
 
       const ctx: RalphLoopContext = {
         client: client as any,
-        workdir: testDir,
+        artifactWorkdir: testDir,
+        codeWorkdir: testDir,
         projectId,
         model: "anthropic/claude-sonnet-4",
         initialCommitHash: "test-initial-hash",
@@ -326,7 +330,8 @@ describe("cli/loop/ralph", () => {
 
       const ctx: RalphLoopContext = {
         client: client as any,
-        workdir: testDir,
+        artifactWorkdir: testDir,
+        codeWorkdir: testDir,
         projectId,
         model: "anthropic/claude-sonnet-4",
         initialCommitHash: "test-initial-hash",
@@ -352,7 +357,8 @@ describe("cli/loop/ralph", () => {
 
       const ctx: RalphLoopContext = {
         client: client as any,
-        workdir: testDir,
+        artifactWorkdir: testDir,
+        codeWorkdir: testDir,
         projectId,
         model: "anthropic/claude-sonnet-4",
         initialCommitHash: "test-initial-hash",
@@ -414,7 +420,8 @@ describe("cli/loop/ralph", () => {
 
       const ctx: RalphLoopContext = {
         client: client as any,
-        workdir: testDir,
+        artifactWorkdir: testDir,
+        codeWorkdir: testDir,
         projectId,
         model: "anthropic/claude-sonnet-4",
         initialCommitHash: "test-initial-hash",
@@ -474,7 +481,8 @@ describe("cli/loop/ralph", () => {
 
       const ctx: RalphLoopContext = {
         client: client as any,
-        workdir: testDir,
+        artifactWorkdir: testDir,
+        codeWorkdir: testDir,
         projectId,
         model: "anthropic/claude-sonnet-4",
         initialCommitHash: "test-initial-hash",
@@ -512,7 +520,8 @@ describe("cli/loop/ralph", () => {
 
       const ctx: RalphLoopContext = {
         client: client as any,
-        workdir: testDir,
+        artifactWorkdir: testDir,
+        codeWorkdir: testDir,
         projectId,
         model: "anthropic/claude-sonnet-4",
         initialCommitHash: "test-initial-hash",

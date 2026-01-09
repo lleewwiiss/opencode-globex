@@ -23,7 +23,8 @@ const PAUSE_CHECK_INTERVAL_MS = 1000
 
 export interface RalphLoopContext {
   client: OpencodeClient
-  workdir: string
+  artifactWorkdir: string
+  codeWorkdir: string
   projectId: string
   model: string
   initialCommitHash: string
@@ -259,12 +260,12 @@ export async function runRalphLoop(
   callbacks: RalphLoopCallbacks,
   signal?: AbortSignal
 ): Promise<RalphLoopResult> {
-  const { client, workdir, projectId, model, initialCommitHash } = ctx
+  const { client, artifactWorkdir, codeWorkdir, projectId, model, initialCommitHash } = ctx
   const completedFeatures: string[] = []
   const blockedFeatures: string[] = []
   
   // Load features to determine starting iteration (resume from where we left off)
-  const initialFeatures = await readFeatures(workdir, projectId)
+  const initialFeatures = await readFeatures(artifactWorkdir, projectId)
   const completedCount = initialFeatures.filter((f) => f.passes || f.blocked).length
   let iteration = completedCount
 
@@ -273,12 +274,12 @@ export async function runRalphLoop(
   try {
     while (!signal?.aborted) {
       // Check and wait for pause
-      await waitWhilePaused(workdir, callbacks, signal)
+      await waitWhilePaused(codeWorkdir, callbacks, signal)
       if (signal?.aborted) break
 
       // Load current features
       log("ralph", "Loading features...")
-      const features = await readFeatures(workdir, projectId)
+      const features = await readFeatures(artifactWorkdir, projectId)
       const nextFeature = getNextFeature(features)
 
       // No more features - we're done
@@ -295,7 +296,7 @@ export async function runRalphLoop(
 
       iteration++
       const iterationStartTime = Date.now()
-      const commitsAtStart = (await getCommitsSince(workdir, initialCommitHash)).length
+      const commitsAtStart = (await getCommitsSince(codeWorkdir, initialCommitHash)).length
       log("ralph", "Starting iteration", { iteration, featureId: nextFeature.id })
       callbacks.onIterationStart(iteration, nextFeature.id)
 
@@ -313,7 +314,7 @@ export async function runRalphLoop(
           blocked: true,
           blockedReason: reason,
         })
-        await writeFeatures(workdir, projectId, updatedFeatures)
+        await writeFeatures(artifactWorkdir, projectId, updatedFeatures)
         continue
       }
 
@@ -325,7 +326,7 @@ export async function runRalphLoop(
       }
 
       // Clear any existing signals before starting
-      await clearSignals(workdir)
+      await clearSignals(codeWorkdir)
 
       // Run Ralph
       log("ralph", "Starting Ralph", { featureId: nextFeature.id })
@@ -353,7 +354,7 @@ export async function runRalphLoop(
       callbacks.onRalphComplete(iteration, nextFeature.id)
 
       // Check if Ralph created .globex-done marker
-      const doneSignal = await checkSignal(workdir, "done")
+      const doneSignal = await checkSignal(codeWorkdir, "done")
       if (!doneSignal) {
         log("ralph", "Ralph did not create .globex-done marker", { featureId: nextFeature.id })
         callbacks.onError(new Error(`Ralph did not create .globex-done marker for ${nextFeature.id}`))
@@ -384,8 +385,8 @@ export async function runRalphLoop(
       }
 
       // Check Wiggum's decision
-      const approved = await checkSignal(workdir, "approved")
-      const rejected = await checkSignal(workdir, "rejected")
+      const approved = await checkSignal(codeWorkdir, "approved")
+      const rejected = await checkSignal(codeWorkdir, "rejected")
 
       log("ralph", "Wiggum decision", { featureId: nextFeature.id, approved, rejected })
       callbacks.onWiggumComplete(iteration, nextFeature.id, approved)
@@ -395,11 +396,11 @@ export async function runRalphLoop(
       if (approved) {
         // Commit changes and update feature as passed (clear rejection feedback)
         log("ralph", "Feature PASSED", { featureId: nextFeature.id, iteration })
-        await commitChanges(workdir, `feat(${nextFeature.id}): implement feature`)
+        await commitChanges(codeWorkdir, `feat(${nextFeature.id}): implement feature`)
         
         // Update commit count and diff stats in TUI
-        const commits = await getCommitsSince(workdir, initialCommitHash)
-        const diffStats = await getDiffStatsSince(workdir, initialCommitHash)
+        const commits = await getCommitsSince(codeWorkdir, initialCommitHash)
+        const diffStats = await getDiffStatsSince(codeWorkdir, initialCommitHash)
         callbacks.onCommitsUpdated(commits.length)
         callbacks.onDiffUpdated(diffStats.added, diffStats.removed)
         log("ralph", "Stats updated", { commits: commits.length, added: diffStats.added, removed: diffStats.removed })
@@ -408,14 +409,14 @@ export async function runRalphLoop(
           passes: true,
           lastRejectionFeedback: undefined,
         })
-        await writeFeatures(workdir, projectId, updatedFeatures)
+        await writeFeatures(artifactWorkdir, projectId, updatedFeatures)
         completedFeatures.push(nextFeature.id)
         callbacks.onFeatureComplete(nextFeature.id)
         iterationPassed = true
       } else if (rejected) {
         // Increment attempt counter and store rejection feedback in features.json
         const newAttempts = currentAttempts + 1
-        const rejection = await readRejectionInfo(workdir)
+        const rejection = await readRejectionInfo(codeWorkdir)
         const reasons = rejection?.reasons ?? ["Unknown reason"]
         
         log("ralph", "Feature FAILED", { featureId: nextFeature.id, attempt: newAttempts, reasons, iteration })
@@ -424,7 +425,7 @@ export async function runRalphLoop(
           lastRejectionFeedback: reasons,
         })
 
-        await writeFeatures(workdir, projectId, updatedFeatures)
+        await writeFeatures(artifactWorkdir, projectId, updatedFeatures)
         callbacks.onFeatureRetry(nextFeature.id, newAttempts, reasons.join("; "))
         iterationPassed = false
       } else {
@@ -435,7 +436,7 @@ export async function runRalphLoop(
 
       // Iteration complete - calculate stats and notify
       const iterationDuration = Date.now() - iterationStartTime
-      const commitsAtEnd = (await getCommitsSince(workdir, initialCommitHash)).length
+      const commitsAtEnd = (await getCommitsSince(codeWorkdir, initialCommitHash)).length
       const iterationCommits = commitsAtEnd - commitsAtStart
       callbacks.onIterationComplete(iteration, {
         duration: iterationDuration,

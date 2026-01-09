@@ -1,5 +1,38 @@
 # Progress
 
+## Feature: ralph-split-workdir
+
+### Status: complete
+
+### Changes Made
+- **cli/src/loop/ralph.ts:24-30**: Changed `RalphLoopContext` interface from `workdir: string` to `artifactWorkdir: string` + `codeWorkdir: string`
+- **cli/src/loop/ralph.ts:263**: Updated destructuring at start of `runRalphLoop`
+- **cli/src/loop/ralph.ts:268,282**: `readFeatures` calls now use `artifactWorkdir`
+- **cli/src/loop/ralph.ts:317,412,428**: `writeFeatures` calls now use `artifactWorkdir`
+- **cli/src/loop/ralph.ts:419**: `readRejectionInfo` call now uses `codeWorkdir` (was artifact-related but kept for rejection marker location)
+- **cli/src/loop/ralph.ts:277,299,329,357,388,389,399,402,403,439**: git/signal calls now use `codeWorkdir`
+- **cli/src/index.ts:280-281**: Updated caller to pass both `artifactWorkdir: ctx.workdir` and `codeWorkdir: ctx.workdir`
+- **cli/tests/loop/ralph.test.ts**: Updated all 9 RalphLoopContext instances to use new schema
+
+### Verification
+- Build: ✓
+- Tests: ✓ (9 pass in ralph.test.ts)
+- Lint: ✓ (2 pre-existing warnings, 0 errors)
+
+### Acceptance Criteria
+- [x] RalphLoopContext has artifactWorkdir and codeWorkdir instead of single workdir
+- [x] readFeatures/writeFeatures use artifactWorkdir
+- [x] commitChanges/getHeadHash/getCommitsSince use codeWorkdir
+- [x] checkSignal/clearSignals/checkPaused use codeWorkdir
+- [x] Build passes
+
+### Files Changed
+- cli/src/loop/ralph.ts
+- cli/src/index.ts
+- cli/tests/loop/ralph.test.ts
+
+---
+
 ## Feature: cli-default-command-update
 
 ### Status: complete

@@ -277,7 +277,8 @@ const runExecutePhase: PhaseRunner = async (ctx) => {
   await runRalphLoop(
     {
       client: ctx.client,
-      workdir: ctx.workdir,
+      artifactWorkdir: ctx.workdir,
+      codeWorkdir: ctx.workdir,
       projectId: ctx.projectId,
       model: ctx.model,
       initialCommitHash: ctx.initialCommitHash,
