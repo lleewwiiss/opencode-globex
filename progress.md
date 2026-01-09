@@ -1,5 +1,35 @@
 # Progress
 
+## Feature: cli-default-command-update
+
+### Status: complete
+
+### Changes Made
+- **cli/bin/globex.ts:66-68**: Updated usage string to show available subcommands
+- **cli/bin/globex.ts:354-365**: Added registry integration when creating projects via --description
+- **cli/bin/globex.ts:377-381**: Enhanced error message to show subcommand options
+
+### Implementation
+1. When `--description` creates a new project, now calls `upsertProject()` to register in `~/.globex/registry.json`
+2. Updated usage string in yargs to list all subcommands
+3. Enhanced "no project" error message to show available subcommands
+4. Backwards compatible - existing --description flag behavior preserved
+
+### Verification
+- Build: ✓
+- Tests: ✓ (176 pass)
+- Lint: ✓ (2 pre-existing warnings, 0 errors)
+
+### Acceptance Criteria
+- [x] Default command registers new projects in registry
+- [x] Backwards compatible - still works with --description flag
+- [x] Updates usage string to show subcommands
+
+### Files Changed
+- cli/bin/globex.ts
+
+---
+
 ## Feature: registry-service-core
 
 ### Status: complete

@@ -65,7 +65,7 @@ const workdir = process.cwd()
 
 await yargs(hideBin(process.argv))
   .scriptName("globex")
-  .usage("$0 <command> [options]")
+  .usage("$0 [command]\n\nCommands:\n  globex                  Resume active project or create with -d\n  globex status           List all projects\n  globex switch <id>      Switch to a project\n  globex init <desc>      Create a new project\n  globex abandon <id>     Remove a project\n  globex workspace        Manage worktrees")
   .command(
     "status",
     "List all globex projects",
@@ -322,7 +322,7 @@ await yargs(hideBin(process.argv))
   )
   .command(
     "$0",
-    "Run globex TUI (auto-detects or creates project)",
+    "Run globex TUI (resume active project or create with -d)",
     (yargs) =>
       yargs
         .option("project", {
@@ -352,6 +352,16 @@ await yargs(hideBin(process.argv))
         } else {
           console.log(`Creating project: ${projectId}`)
           createProject(workdir, projectId, argv.description)
+          
+          // Register in global registry
+          const registryEntry: RegistryEntry = {
+            name: argv.description,
+            repoPath: workdir,
+            phase: "init",
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          }
+          await upsertProject(projectId, registryEntry)
         }
       }
       
@@ -364,6 +374,11 @@ await yargs(hideBin(process.argv))
       if (!projectId) {
         console.error("No project found. Run with --description to create one:")
         console.error("  globex --description \"My feature description\"")
+        console.error("")
+        console.error("Or use a subcommand:")
+        console.error("  globex status        - List all projects")
+        console.error("  globex switch <id>   - Switch to a project")
+        console.error("  globex init <desc>   - Create a new project")
         process.exit(1)
       }
       
