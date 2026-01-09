@@ -1,48 +1,11 @@
 /** @jsxImportSource @opentui/solid */
-import { For, Match, Switch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
-import { link } from "@opentui/core"
+import { For, Match, Switch, createEffect, createSignal, onCleanup } from "solid-js"
 import { colors, TOOL_ICONS } from "./colors"
 import { formatDuration } from "../util/time"
 import type { ToolEvent } from "../state/types"
-import * as path from "node:path"
 
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 const DEFAULT_ICON = "\u2699"
-
-interface TextSegment {
-  type: "text" | "file"
-  text: string
-  url?: string
-}
-
-function parseTextWithFilePaths(text: string, workdir: string): TextSegment[] {
-  const segments: TextSegment[] = []
-  const filePathRegex = /(?:^|\s)((?:\.\/|\.\.\/|\/)?(?:[\w.-]+\/)*[\w.-]+\.[a-zA-Z0-9]+(?::\d+(?:-\d+)?)?)/g
-  let lastIndex = 0
-  let match
-
-  while ((match = filePathRegex.exec(text)) !== null) {
-    const filePath = match[1]
-    const matchStart = match.index + (match[0].length - filePath.length)
-    
-    if (matchStart > lastIndex) {
-      segments.push({ type: "text", text: text.slice(lastIndex, matchStart) })
-    }
-    
-    const [pathPart, lineRange] = filePath.split(":")
-    const absolutePath = pathPart.startsWith("/") ? pathPart : path.join(workdir, pathPart)
-    const fileUrl = lineRange ? `file://${absolutePath}#L${lineRange}` : `file://${absolutePath}`
-    
-    segments.push({ type: "file", text: filePath, url: fileUrl })
-    lastIndex = matchStart + filePath.length
-  }
-
-  if (lastIndex < text.length) {
-    segments.push({ type: "text", text: text.slice(lastIndex) })
-  }
-
-  return segments.length > 0 ? segments : [{ type: "text", text }]
-}
 
 export function getEventKey(event: ToolEvent): string {
   return `${event.iteration}-${event.timestamp}`
@@ -73,7 +36,73 @@ export type LogProps = {
   workdir: string
 }
 
-function Spinner(props: { isIdle: boolean; currentAgent: "idle" | "ralph" | "wiggum" }) {
+function SpinnerInline(props: { frame: number; currentAgent: "idle" | "ralph" | "wiggum" }) {
+  const message = () => {
+    if (props.currentAgent === "wiggum") return "Chief Wiggum is keeping him in line..."
+    return "Ralph is working..."
+  }
+
+  return (
+    <box width="100%" flexDirection="row" paddingTop={1}>
+      <text fg={colors.cyan}>{SPINNER_FRAMES[props.frame]}</text>
+      <text fg={colors.fgMuted}> {message()}</text>
+    </box>
+  )
+}
+
+function SeparatorEvent(props: { event: ToolEvent }) {
+  const isComplete = () => props.event.duration !== undefined
+  const durationText = () =>
+    props.event.duration !== undefined
+      ? formatDuration(props.event.duration)
+      : "running"
+  const commitCount = () => props.event.commitCount ?? 0
+  const commitText = () =>
+    `${commitCount()} commit${commitCount() !== 1 ? "s" : ""}`
+  const statusText = () => {
+    if (props.event.passed === true) return "✓ passed"
+    if (props.event.passed === false) return "✗ failed"
+    return null
+  }
+  const statusColor = () => {
+    if (props.event.passed === true) return colors.green
+    if (props.event.passed === false) return colors.red
+    return colors.fg
+  }
+
+  return (
+    <box width="100%" paddingTop={1} paddingBottom={1} flexDirection="row">
+      <text fg={colors.fgMuted}>{"── "}</text>
+      <text fg={colors.fg}>iteration {props.event.iteration}</text>
+      <text fg={colors.fgMuted}>{" ────────────── "}</text>
+      {isComplete() && statusText() ? (
+        <>
+          <text fg={statusColor()}>{statusText()}</text>
+          <text fg={colors.fgMuted}>{" · "}</text>
+        </>
+      ) : null}
+      <text fg={colors.fg}>{durationText()}</text>
+      <text fg={colors.fgMuted}>{" · "}</text>
+      <text fg={colors.fg}>{commitText()}</text>
+      <text fg={colors.fgMuted}>{" ──"}</text>
+    </box>
+  )
+}
+
+function ToolEventItem(props: { event: ToolEvent; workdir: string }) {
+  const icon = () => props.event.icon || DEFAULT_ICON
+  const iconColor = () => getToolColor(props.event.icon)
+
+  return (
+    <box width="100%" flexDirection="row">
+      <text fg={iconColor()}>{icon()}</text>
+      <text fg={colors.fg}> {props.event.text}</text>
+    </box>
+  )
+}
+
+export function Log(props: LogProps) {
+  // Lift spinner animation state to Log level to avoid signal creation during reactive updates
   const [frame, setFrame] = createSignal(0)
   let intervalRef: ReturnType<typeof setInterval> | null = null
 
@@ -99,89 +128,6 @@ function Spinner(props: { isIdle: boolean; currentAgent: "idle" | "ralph" | "wig
     }
   })
 
-  const message = () => {
-    if (props.currentAgent === "wiggum") return "Chief Wiggum is keeping him in line..."
-    return "Ralph is working..."
-  }
-
-  return (
-    <box width="100%" flexDirection="row" paddingTop={1}>
-      <text fg={colors.cyan}>{SPINNER_FRAMES[frame()]}</text>
-      <text fg={colors.fgMuted}> {message()}</text>
-    </box>
-  )
-}
-
-function SeparatorEvent(props: { event: ToolEvent }) {
-  const isComplete = createMemo(() => props.event.duration !== undefined)
-  const durationText = createMemo(() =>
-    props.event.duration !== undefined
-      ? formatDuration(props.event.duration)
-      : "running"
-  )
-  const commitCount = createMemo(() => props.event.commitCount ?? 0)
-  const commitText = createMemo(() =>
-    `${commitCount()} commit${commitCount() !== 1 ? "s" : ""}`
-  )
-  const statusText = createMemo(() => {
-    if (props.event.passed === true) return "✓ passed"
-    if (props.event.passed === false) return "✗ failed"
-    return null
-  })
-  const statusColor = createMemo(() => {
-    if (props.event.passed === true) return colors.green
-    if (props.event.passed === false) return colors.red
-    return colors.fg
-  })
-
-  return (
-    <box width="100%" paddingTop={1} paddingBottom={1} flexDirection="row">
-      <text fg={colors.fgMuted}>{"── "}</text>
-      <text fg={colors.fg}>iteration {props.event.iteration}</text>
-      <text fg={colors.fgMuted}>{" ────────────── "}</text>
-      {isComplete() && statusText() ? (
-        <>
-          <text fg={statusColor()}>{statusText()}</text>
-          <text fg={colors.fgMuted}>{" · "}</text>
-        </>
-      ) : null}
-      <text fg={colors.fg}>{durationText()}</text>
-      <text fg={colors.fgMuted}>{" · "}</text>
-      <text fg={colors.fg}>{commitText()}</text>
-      <text fg={colors.fgMuted}>{" ──"}</text>
-    </box>
-  )
-}
-
-function ToolEventItem(props: { event: ToolEvent; workdir: string }) {
-  const icon = createMemo(() => props.event.icon || DEFAULT_ICON)
-  const iconColor = createMemo(() => getToolColor(props.event.icon))
-  const segments = createMemo(() => parseTextWithFilePaths(props.event.text, props.workdir))
-
-  return (
-    <box width="100%" flexDirection="row">
-      <text fg={iconColor()}>{icon()}</text>
-      <text>
-        <For each={segments()}>
-          {(segment) => (
-            <Switch>
-              <Match when={segment.type === "file"}>
-                <span style={{ fg: colors.blue, underline: true }}>
-                  {link(segment.url!)(segment.text)}
-                </span>
-              </Match>
-              <Match when={segment.type === "text"}>
-                <span style={{ fg: colors.fg }}>{segment.text}</span>
-              </Match>
-            </Switch>
-          )}
-        </For>
-      </text>
-    </box>
-  )
-}
-
-export function Log(props: LogProps) {
   return (
     <scrollbox
       flexGrow={1}
@@ -204,7 +150,7 @@ export function Log(props: LogProps) {
         {(event) => (
           <Switch>
             <Match when={event.type === "spinner"}>
-              <Spinner isIdle={props.isIdle} currentAgent={props.currentAgent} />
+              <SpinnerInline frame={frame()} currentAgent={props.currentAgent} />
             </Match>
             <Match when={event.type === "separator"}>
               <SeparatorEvent event={event} />

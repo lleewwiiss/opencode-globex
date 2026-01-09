@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-import { createMemo, Show } from "solid-js"
+import { Show } from "solid-js"
 import { colors } from "./colors"
 import { formatDuration } from "../util/time"
 import type { Phase } from "../state/types"
@@ -55,38 +55,37 @@ const AGENT_DISPLAY: Record<"idle" | "ralph" | "wiggum", { icon: string; color: 
 }
 
 export function Header(props: HeaderProps) {
-  const phaseIcon = createMemo(() => PHASE_ICONS[props.phase])
-  const phaseColor = createMemo(() => PHASE_COLORS[props.phase])
-  const phaseLabel = createMemo(() => PHASE_LABELS[props.phase])
+  const phaseIcon = () => PHASE_ICONS[props.phase]
+  const phaseColor = () => PHASE_COLORS[props.phase]
+  const phaseLabel = () => PHASE_LABELS[props.phase]
 
-  const agentDisplay = createMemo(() => {
+  const agentDisplay = () => {
     if (props.paused) return { icon: "⏸", color: colors.yellow, label: "paused" }
     return AGENT_DISPLAY[props.currentAgent ?? "idle"]
-  })
+  }
 
-  const progress = createMemo(() => {
+  const progress = () => {
     if (props.totalFeatures === 0) return null
     return `${props.featuresComplete}/${props.totalFeatures}`
-  })
+  }
 
-  const progressPct = createMemo(() => {
+  const progressPct = () => {
     if (props.totalFeatures === 0) return 0
     return Math.round((props.featuresComplete / props.totalFeatures) * 100)
-  })
+  }
 
   const BAR_SEGMENTS = 10
-  const filledCount = createMemo(() =>
+  const filledCount = () =>
     props.totalFeatures > 0
       ? Math.round((props.featuresComplete / props.totalFeatures) * BAR_SEGMENTS)
       : 0
-  )
-  const filledBar = createMemo(() => "■".repeat(filledCount()))
-  const emptyBar = createMemo(() => "□".repeat(BAR_SEGMENTS - filledCount()))
+  const filledBar = () => "■".repeat(filledCount())
+  const emptyBar = () => "□".repeat(BAR_SEGMENTS - filledCount())
 
-  const etaText = createMemo(() => {
+  const etaText = () => {
     if (!props.eta || props.eta <= 0) return null
     return formatDuration(props.eta)
-  })
+  }
 
   return (
     <box

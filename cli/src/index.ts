@@ -198,32 +198,37 @@ function createLoopCallbacks(
       }))
     },
     onToolEvent: (event) => {
-      setState((prev) => {
-        const events = [...prev.execute.events]
-        const spinnerIndex = events.findIndex((e) => e.type === "spinner")
-        if (spinnerIndex !== -1) {
-          events.splice(spinnerIndex, 0, event)
-        } else {
-          events.push(event)
-        }
-        return {
-          ...prev,
-          execute: {
-            ...prev.execute,
-            events,
-          },
-        }
+      // Defer state update to avoid triggering during render cycle
+      queueMicrotask(() => {
+        setState((prev) => {
+          const events = [...prev.execute.events]
+          const spinnerIndex = events.findIndex((e) => e.type === "spinner")
+          if (spinnerIndex !== -1) {
+            events.splice(spinnerIndex, 0, event)
+          } else {
+            events.push(event)
+          }
+          return {
+            ...prev,
+            execute: {
+              ...prev.execute,
+              events,
+            },
+          }
+        })
       })
     },
     onIdleChanged: (isIdle, agent) => {
-      setState((prev) => ({
-        ...prev,
-        execute: {
-          ...prev.execute,
-          isIdle,
-          currentAgent: isIdle ? "idle" : agent,
-        },
-      }))
+      queueMicrotask(() => {
+        setState((prev) => ({
+          ...prev,
+          execute: {
+            ...prev.execute,
+            isIdle,
+            currentAgent: isIdle ? "idle" : agent,
+          },
+        }))
+      })
     },
   }
 }
@@ -601,11 +606,13 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
 
   process.on("SIGINT", async () => {
     await cleanup()
+    await new Promise((resolve) => setTimeout(resolve, 100))
     process.exit(0)
   })
 
   process.on("SIGTERM", async () => {
     await cleanup()
+    await new Promise((resolve) => setTimeout(resolve, 100))
     process.exit(0)
   })
 
@@ -886,6 +893,8 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
   } finally {
     server?.close()
     await cleanup()
+    // Small delay to let Bun/OpenTUI finish cleanup before exit
+    await new Promise((resolve) => setTimeout(resolve, 100))
     process.exit(0)
   }
 }

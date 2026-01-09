@@ -101,3 +101,82 @@ All 4 methods were already implemented:
 
 ### Files Changed
 - cli/src/git.ts (1 line edit)
+
+---
+
+## Feature: registry-service-wrappers
+
+### Status: complete
+
+### Changes Made
+- **cli/src/state/registry.ts**: Renamed Effect wrappers and added async wrappers
+
+### Implementation
+Renamed existing Effect wrappers and added async wrappers following patterns from persistence.ts:102-134 and git.ts:131-141.
+
+**Effect wrappers (all provide RegistryLayer):**
+- `loadRegistryEffect` 
+- `saveRegistryEffect`
+- `getProjectFromRegistry`
+- `upsertProjectInRegistry`
+- `removeProjectFromRegistry`
+- `listAllProjects`
+- `listRepoProjects`
+
+**Async wrappers:**
+- `loadRegistry`
+- `getProject`
+- `upsertProject`
+- `removeProject`
+
+### Verification
+- Build: ✓
+- Tests: ✓ (79 pass)
+- Lint: ✓ (4 pre-existing warnings, 0 errors)
+
+### Acceptance Criteria
+- [x] loadRegistryEffect, getProjectFromRegistry, upsertProjectInRegistry, removeProjectFromRegistry, listAllProjects, listRepoProjects Effect wrappers
+- [x] loadRegistry, getProject, upsertProject, removeProject async wrappers
+- [x] All wrappers provide RegistryLayer
+- [x] Exports are added
+
+### Files Changed
+- cli/src/state/registry.ts
+
+---
+
+## Feature: registry-tests
+
+### Status: complete
+
+### Changes Made
+- **cli/tests/state/registry.test.ts**: Created new test file for registry CRUD operations
+
+### Implementation
+Tests use mocked HOME directory via `spyOn(os, "homedir")` to isolate registry file to temp directory.
+
+**Test cases:**
+1. `loadRegistry` > returns empty projects when no file exists
+2. `loadRegistry` > reads existing registry file
+3. `upsertProject` > creates registry file when none exists
+4. `upsertProject` > updates existing project entry
+5. `upsertProject` > adds multiple projects
+6. `removeProject` > removes entry from registry
+7. `removeProject` > handles removing non-existent project gracefully
+8. `getProject` > returns undefined for non-existent project
+9. `getProject` > returns entry for existing project
+
+### Verification
+- Build: Pre-existing errors in header.tsx (createMemo not imported) - unrelated to test file
+- Tests: ✓ (9 pass, all registry tests green)
+- Lint: ✓ (1 warning unrelated to test file)
+
+### Acceptance Criteria
+- [x] Test file exists at cli/tests/state/registry.test.ts
+- [x] Tests loadRegistry returns empty on no file
+- [x] Tests upsertProject creates registry file
+- [x] Tests removeProject removes entry
+- [x] Tests mock HOME dir for isolation
+
+### Files Changed
+- cli/tests/state/registry.test.ts (new file)

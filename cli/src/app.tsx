@@ -222,22 +222,8 @@ function ExecuteScreen(props: {
   const renderer = useRenderer()
   const [elapsed, setElapsed] = createSignal(0)
 
-  const paused = createMemo(() => props.state.paused)
-  const phase = createMemo(() => props.state.phase)
-  const projectName = createMemo(() => props.state.projectName)
-  const featuresComplete = createMemo(() => props.state.featuresComplete)
-  const totalFeatures = createMemo(() => props.state.totalFeatures)
-  const startedAt = createMemo(() => props.state.startedAt)
-  const eta = createMemo(() => props.state.eta)
-  const events = createMemo(() => props.state.events)
-  const isIdle = createMemo(() => props.state.isIdle)
-  const commits = createMemo(() => props.state.commits)
-  const linesAdded = createMemo(() => props.state.linesAdded)
-  const linesRemoved = createMemo(() => props.state.linesRemoved)
-  const currentAgent = createMemo(() => props.state.currentAgent)
-
   createEffect(() => {
-    const start = startedAt()
+    const start = props.state.startedAt
     if (!start) return
 
     const tick = () => {
@@ -287,27 +273,27 @@ function ExecuteScreen(props: {
       backgroundColor={colors.bg}
     >
       <Header
-        phase={phase()}
-        projectName={projectName()}
-        featuresComplete={featuresComplete()}
-        totalFeatures={totalFeatures()}
-        startedAt={startedAt()}
-        eta={eta()}
-        currentAgent={currentAgent()}
-        paused={paused()}
+        phase={props.state.phase}
+        projectName={props.state.projectName}
+        featuresComplete={props.state.featuresComplete}
+        totalFeatures={props.state.totalFeatures}
+        startedAt={props.state.startedAt}
+        eta={props.state.eta}
+        currentAgent={props.state.currentAgent}
+        paused={props.state.paused}
       />
 
-      <Log events={events()} isIdle={isIdle()} currentAgent={currentAgent()} workdir={props.workdir} />
+      <Log events={props.state.events} isIdle={props.state.isIdle} currentAgent={props.state.currentAgent} workdir={props.workdir} />
 
       <Footer
-        commits={commits()}
+        commits={props.state.commits}
         elapsed={elapsed()}
-        paused={paused()}
-        linesAdded={linesAdded()}
-        linesRemoved={linesRemoved()}
+        paused={props.state.paused}
+        linesAdded={props.state.linesAdded}
+        linesRemoved={props.state.linesRemoved}
       />
 
-      <PausedOverlay visible={paused()} />
+      <PausedOverlay visible={props.state.paused} />
     </box>
   )
 }

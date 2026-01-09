@@ -128,44 +128,56 @@ const RegistryLayer = RegistryServiceLive.pipe(
   Layer.provide(NodeFileSystem.layer)
 )
 
-export const loadRegistry = () =>
+export const loadRegistryEffect = () =>
   Effect.gen(function* () {
     const service = yield* RegistryService
     return yield* service.loadRegistry()
   }).pipe(Effect.provide(RegistryLayer))
 
-export const saveRegistry = (registry: Registry) =>
+export const saveRegistryEffect = (registry: Registry) =>
   Effect.gen(function* () {
     const service = yield* RegistryService
     return yield* service.saveRegistry(registry)
   }).pipe(Effect.provide(RegistryLayer))
 
-export const getProject = (projectId: string) =>
+export const getProjectFromRegistry = (projectId: string) =>
   Effect.gen(function* () {
     const service = yield* RegistryService
     return yield* service.getProject(projectId)
   }).pipe(Effect.provide(RegistryLayer))
 
-export const upsertProject = (projectId: string, entry: RegistryEntry) =>
+export const upsertProjectInRegistry = (projectId: string, entry: RegistryEntry) =>
   Effect.gen(function* () {
     const service = yield* RegistryService
     return yield* service.upsertProject(projectId, entry)
   }).pipe(Effect.provide(RegistryLayer))
 
-export const removeProject = (projectId: string) =>
+export const removeProjectFromRegistry = (projectId: string) =>
   Effect.gen(function* () {
     const service = yield* RegistryService
     return yield* service.removeProject(projectId)
   }).pipe(Effect.provide(RegistryLayer))
 
-export const listProjects = () =>
+export const listAllProjects = () =>
   Effect.gen(function* () {
     const service = yield* RegistryService
     return yield* service.listProjects()
   }).pipe(Effect.provide(RegistryLayer))
 
-export const listProjectsForRepo = (repoPath: string) =>
+export const listRepoProjects = (repoPath: string) =>
   Effect.gen(function* () {
     const service = yield* RegistryService
     return yield* service.listProjectsForRepo(repoPath)
   }).pipe(Effect.provide(RegistryLayer))
+
+export const loadRegistry = async (): Promise<Registry> =>
+  Effect.runPromise(loadRegistryEffect())
+
+export const getProject = async (projectId: string): Promise<RegistryEntry | undefined> =>
+  Effect.runPromise(getProjectFromRegistry(projectId))
+
+export const upsertProject = async (projectId: string, entry: RegistryEntry): Promise<void> =>
+  Effect.runPromise(upsertProjectInRegistry(projectId, entry))
+
+export const removeProject = async (projectId: string): Promise<void> =>
+  Effect.runPromise(removeProjectFromRegistry(projectId))

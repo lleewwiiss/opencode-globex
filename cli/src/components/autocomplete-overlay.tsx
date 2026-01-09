@@ -1,8 +1,8 @@
 /** @jsxImportSource @opentui/solid */
-import { createMemo, createSignal, createEffect, onCleanup, For, Show } from "solid-js"
+import { createMemo, createSignal, createEffect, onCleanup, For } from "solid-js"
 import type { ScrollBoxRenderable } from "@opentui/core"
 import { colors } from "./colors.js"
-import type { TextInputWithRefsRef, AutocompleteOption } from "./text-input-with-refs.js"
+import type { TextInputWithRefsRef } from "./text-input-with-refs.js"
 
 export interface AutocompleteOverlayProps {
   inputRef: () => TextInputWithRefsRef | undefined

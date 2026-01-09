@@ -50,6 +50,7 @@ function createSyntaxStyleWithFileRef(): { syntaxStyle: SyntaxStyle; fileStyleId
 }
 
 export function TextInputWithRefs(props: TextInputWithRefsProps) {
+  // eslint-disable-next-line no-unused-vars -- assigned via JSX ref
   let textareaRef: TextareaRenderable | undefined
   let inputBoxRef: BoxRenderable | undefined
 
