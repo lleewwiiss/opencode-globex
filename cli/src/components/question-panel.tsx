@@ -14,6 +14,7 @@ export interface QuestionPanelProps {
   isCustom: boolean
   focused: boolean
   onAnswerChange: (value: string, isCustom: boolean) => void
+  onAdvance?: () => void
 }
 
 export function QuestionPanel(props: QuestionPanelProps) {
@@ -56,6 +57,7 @@ export function QuestionPanel(props: QuestionPanelProps) {
               isCustom={props.isCustom}
               focused={props.focused}
               onSelect={handleChoiceSelect}
+              onAdvance={props.onAdvance}
             />
           </Match>
           <Match when={props.question.type === "text"}>

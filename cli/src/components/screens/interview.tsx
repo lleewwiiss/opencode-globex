@@ -304,6 +304,12 @@ export function InterviewScreen(props: InterviewScreenProps) {
                   onAnswerChange={(value, isCustom) => 
                     handleAnswerChange(activeQuestion()!.id, value, isCustom)
                   }
+                  onAdvance={() => {
+                    const qs = questions()
+                    if (activeQuestionIndex() < qs.length - 1) {
+                      setActiveQuestionIndex((i) => i + 1)
+                    }
+                  }}
                 />
               </Show>
             </box>

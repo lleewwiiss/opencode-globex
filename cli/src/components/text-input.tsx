@@ -1,4 +1,5 @@
 /** @jsxImportSource @opentui/solid */
+import { createEffect } from "solid-js"
 import { colors } from "./colors.js"
 import type { TextareaRenderable } from "@opentui/core"
 
@@ -21,6 +22,29 @@ export interface TextInputProps {
 export function TextInput(props: TextInputProps) {
   // eslint-disable-next-line no-unassigned-vars -- Solid.js ref pattern: assigned via ref prop
   let textareaRef: TextareaRenderable | undefined
+  let lastPropsValue: string | undefined = undefined
+
+  createEffect(() => {
+    const val = props.value ?? ""
+    const focused = props.focused ?? true
+    
+    if (textareaRef) {
+      if (!focused && lastPropsValue !== undefined) {
+        const currentText = textareaRef.getTextRange(0, 10000)
+        if (currentText !== lastPropsValue && props.onInput) {
+          props.onInput(currentText)
+        }
+      }
+      
+      if (val !== lastPropsValue) {
+        textareaRef.clear()
+        if (val) {
+          textareaRef.insertText(val)
+        }
+        lastPropsValue = val
+      }
+    }
+  })
 
   const handleTextareaSubmit = () => {
     if (!textareaRef) return

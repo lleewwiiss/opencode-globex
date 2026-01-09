@@ -11,6 +11,7 @@ export interface ChoiceInputProps {
   isCustom: boolean
   focused: boolean
   onSelect: (value: string, isCustom: boolean) => void
+  onAdvance?: () => void
 }
 
 export function ChoiceInput(props: ChoiceInputProps) {
@@ -60,6 +61,7 @@ export function ChoiceInput(props: ChoiceInputProps) {
         setCustomMode(true)
       } else {
         props.onSelect(opts[idx].label, false)
+        props.onAdvance?.()
       }
     }
   })
@@ -67,6 +69,7 @@ export function ChoiceInput(props: ChoiceInputProps) {
   const handleCustomSubmit = (text: string) => {
     props.onSelect(text, true)
     setCustomMode(false)
+    props.onAdvance?.()
   }
   
 
