@@ -2,7 +2,8 @@ import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import type { Setter } from "solid-js"
 import { startApp, createInitialAppState, type AppState, type AppCallbacks } from "./app.js"
 import { getOrCreateOpencodeServer } from "./opencode/server.js"
-import { loadState, checkStateExists, createState, saveState, sanitizeProjectId, setActiveProject, getActiveProject, updatePhase, clearActiveProject } from "./state/persistence.js"
+import { loadState, checkStateExists, createState, saveState, sanitizeProjectId, setActiveProject, getActiveProject, updatePhase, clearActiveProject, getProjectDir } from "./state/persistence.js"
+import * as fs from "node:fs/promises"
 import { readFeatures, readFeaturesWithSummary } from "./state/features-persistence.js"
 import { loadConfig } from "./config.js"
 import { runRalphLoop, type RalphLoopCallbacks } from "./loop/ralph.js"
@@ -575,11 +576,45 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
     let currentProjectName: string | null = null
     let currentPhase: Phase | null = null
 
-    // Phase transition handler - called when interview completes
-    const handlePhaseComplete = async (completedPhase: Phase) => {
+    // Helper to read artifact content
+    const readArtifact = async (projectId: string, artifactName: string): Promise<string> => {
+      const projectDir = getProjectDir(workdir, projectId)
+      const artifactPath = `${projectDir}/${artifactName}`
+      try {
+        return await fs.readFile(artifactPath, "utf-8")
+      } catch {
+        return `[Could not load ${artifactName}]`
+      }
+    }
+
+    // Transition to review screen after interview completes
+    const transitionToReview = async (completedPhase: Phase) => {
       if (!currentProjectId || !currentProjectName) return
       
-      if (completedPhase === "research_interview") {
+      const artifactName = completedPhase === "research_interview" ? "research.md" : "plan.md"
+      const artifactContent = await readArtifact(currentProjectId, artifactName)
+      
+      setState((prev) => ({
+        ...prev,
+        screen: "review",
+        review: {
+          phase: completedPhase,
+          projectName: currentProjectName!,
+          projectId: currentProjectId!,
+          artifactName,
+          artifactContent,
+          chatHistory: [],
+          isWaitingForAgent: false,
+          startedAt: Date.now(),
+        },
+      }))
+    }
+
+    // Phase transition handler - called when review is confirmed
+    const handleReviewConfirm = async () => {
+      if (!currentProjectId || !currentProjectName || !currentPhase) return
+      
+      if (currentPhase === "research_interview") {
         // research_interview → plan → plan_interview
         const { submitAnswer } = await transitionToPlan(
           client, setState, workdir, currentProjectId, currentProjectName,
@@ -587,7 +622,7 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
         )
         interviewSubmitAnswer = submitAnswer
         currentPhase = "plan_interview"
-      } else if (completedPhase === "plan_interview") {
+      } else if (currentPhase === "plan_interview") {
         // plan_interview → features → confirm
         await transitionToFeatures(
           client, setState, workdir, currentProjectId, currentProjectName,
@@ -595,6 +630,56 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
         )
         currentPhase = "features"
       }
+    }
+
+    // Handle feedback in review screen - simple back-and-forth
+    let currentArtifactName: string | null = null
+    
+    const handleReviewFeedback = async (feedback: string) => {
+      if (!currentProjectId || !currentProjectName) {
+        log("index", "Cannot handle feedback - missing context", { 
+          currentProjectId, currentProjectName
+        })
+        return
+      }
+      
+      // Add user message to chat history
+      setState((prev) => {
+        currentArtifactName = prev.review.artifactName
+        return {
+          ...prev,
+          review: {
+            ...prev.review,
+            chatHistory: [...prev.review.chatHistory, { role: "user" as const, content: feedback }],
+            isWaitingForAgent: true,
+          },
+        }
+      })
+      
+      // For now, just acknowledge the feedback and update artifact
+      // In full implementation, this would use the interview session to get agent response
+      // and potentially update the artifact
+      
+      // Simple acknowledgment for MVP
+      setTimeout(async () => {
+        // Re-read the artifact in case it was updated
+        const artifactContent = currentArtifactName 
+          ? await readArtifact(currentProjectId!, currentArtifactName)
+          : ""
+        
+        setState((prev) => ({
+          ...prev,
+          review: {
+            ...prev.review,
+            artifactContent,
+            chatHistory: [...prev.review.chatHistory, { 
+              role: "agent" as const, 
+              content: "Feedback noted. Please review the artifact above and confirm when ready to proceed, or provide more feedback." 
+            }],
+            isWaitingForAgent: false,
+          },
+        }))
+      }, 500)
     }
 
     const callbacks: AppCallbacks = {
@@ -609,9 +694,15 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
         if (interviewSubmitAnswer) {
           const complete = await interviewSubmitAnswer(payload)
           if (complete && currentPhase) {
-            await handlePhaseComplete(currentPhase)
+            await transitionToReview(currentPhase)
           }
         }
+      },
+      onReviewConfirm: async () => {
+        await handleReviewConfirm()
+      },
+      onReviewFeedback: async (feedback) => {
+        await handleReviewFeedback(feedback)
       },
       onConfirmExecute: async () => {
         if (currentProjectId) {

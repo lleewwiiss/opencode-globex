@@ -8,8 +8,9 @@ import {
 } from "../state/schema.js"
 import { log } from "../util/log.js"
 
-const MIN_QUESTIONS_TOTAL = 5
-const MAX_INTERVIEW_ROUNDS = 5
+const MIN_QUESTIONS_TOTAL = 8
+const MIN_ROUNDS = 2
+const MAX_INTERVIEW_ROUNDS = 6
 const MAX_PARSE_RETRIES = 2
 
 export interface ParsedInterviewResult {
@@ -121,7 +122,9 @@ export function parseInterviewResponse(
   const newTotal = totalQuestionsSoFar + questionCount
   
   const agentWantsComplete = data.complete === true
-  const eligibleForCompletion = newTotal >= MIN_QUESTIONS_TOTAL
+  const hasMinQuestions = newTotal >= MIN_QUESTIONS_TOTAL
+  const hasMinRounds = round >= MIN_ROUNDS
+  const eligibleForCompletion = hasMinQuestions && hasMinRounds
   const maxRoundsReached = round >= MAX_INTERVIEW_ROUNDS
   
   const complete = (agentWantsComplete && eligibleForCompletion) || maxRoundsReached
@@ -132,6 +135,8 @@ export function parseInterviewResponse(
     questionCount,
     totalQuestionsSoFar: newTotal,
     agentWantsComplete,
+    hasMinQuestions,
+    hasMinRounds,
     eligibleForCompletion,
     maxRoundsReached,
     complete,

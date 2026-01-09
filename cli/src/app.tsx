@@ -9,11 +9,12 @@ import { InitScreen, type ActiveProject } from "./components/screens/init.js"
 import { BackgroundScreen } from "./components/screens/background.js"
 import { InterviewScreen } from "./components/screens/interview.js"
 import { ConfirmScreen } from "./components/screens/confirm.js"
+import { ReviewScreen } from "./components/screens/review.js"
 import { colors } from "./components/colors.js"
 import type { Phase, ToolEvent } from "./state/types.js"
 import type { FileReference, InterviewRound, InterviewAnswersPayload } from "./state/schema.js"
 
-export type Screen = "init" | "background" | "interview" | "confirm" | "execute"
+export type Screen = "init" | "background" | "interview" | "review" | "confirm" | "execute"
 
 export interface InitState {
   activeProject?: ActiveProject
@@ -56,6 +57,17 @@ export interface ExecuteState {
   currentAgent: "idle" | "ralph" | "wiggum"
 }
 
+export interface ReviewState {
+  phase: Phase
+  projectName: string
+  projectId: string
+  artifactName: string
+  artifactContent: string
+  chatHistory: { role: "user" | "agent"; content: string }[]
+  isWaitingForAgent: boolean
+  startedAt: number
+}
+
 export interface ConfirmState {
   projectName: string
   projectId: string
@@ -69,6 +81,7 @@ export interface AppState {
   init: InitState
   background: BackgroundState
   interview: InterviewState
+  review: ReviewState
   confirm: ConfirmState
   execute: ExecuteState
 }
@@ -78,6 +91,8 @@ export interface AppCallbacks {
   onContinue: (projectId: string) => void
   onNewProject: (description: string, refs: FileReference[]) => void
   onInterviewAnswer?: (payload: InterviewAnswersPayload) => void
+  onReviewConfirm?: () => void
+  onReviewFeedback?: (feedback: string) => void
   onConfirmExecute?: () => void
   onKeyboardEvent?: () => void
   onPauseToggle?: (paused: boolean) => void
@@ -118,6 +133,16 @@ export function createInitialAppState(screen: Screen = "init"): AppState {
       startedAt: Date.now(),
       isWaitingForAgent: true,
       currentRound: null,
+    },
+    review: {
+      phase: "research_interview",
+      projectName: "",
+      projectId: "",
+      artifactName: "",
+      artifactContent: "",
+      chatHistory: [],
+      isWaitingForAgent: false,
+      startedAt: Date.now(),
     },
     confirm: {
       projectName: "",
@@ -327,6 +352,15 @@ export function App(props: AppProps) {
           setState={setState}
           onQuit={handleQuit}
           onSubmitAnswer={props.callbacks.onInterviewAnswer}
+        />
+      </Match>
+      <Match when={screen() === "review"}>
+        <ReviewScreen
+          state={() => state().review}
+          setState={setState}
+          onQuit={handleQuit}
+          onConfirm={() => props.callbacks.onReviewConfirm?.()}
+          onFeedback={(feedback) => props.callbacks.onReviewFeedback?.(feedback)}
         />
       </Match>
       <Match when={screen() === "confirm"}>
