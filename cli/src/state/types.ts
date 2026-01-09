@@ -10,6 +10,15 @@ export type Phase =
 
 export type ApprovalStatus = "pending" | "approved" | "approved_with_risks" | "rejected"
 
+export type WorkspaceType = "current" | "worktree"
+
+export interface WorkspaceInfo {
+  type: WorkspaceType
+  worktreePath?: string
+  branchName?: string
+  createdAt?: string
+}
+
 export interface Approval {
   status: ApprovalStatus
   timestamp: string
@@ -34,6 +43,8 @@ export interface GlobexState {
   approvals: Partial<Record<"research" | "plan" | "features", Approval>>
   artifacts: Partial<Record<string, string>>
   interviewHistory: Partial<Record<"research" | "plan" | "features", InterviewHistory>>
+  workspace?: WorkspaceInfo
+  initialCommitHash?: string
 }
 
 export type TUIStatus = "idle" | "running" | "paused" | "waiting_approval" | "error"
