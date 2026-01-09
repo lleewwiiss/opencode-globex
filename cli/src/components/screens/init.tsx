@@ -5,7 +5,9 @@ import type { SelectOption } from "@opentui/core"
 import { colors } from "../colors.js"
 import { SimpleHeader } from "../simple-header.js"
 import { SimpleFooter, type KeyHint } from "../simple-footer.js"
-import { TextInput } from "../text-input.js"
+import { TextInputWithRefs, type TextInputWithRefsRef } from "../text-input-with-refs.js"
+import { AutocompleteOverlay } from "../autocomplete-overlay.js"
+import type { FileReference } from "../../state/schema.js"
 
 export interface ActiveProject {
   id: string
@@ -15,8 +17,9 @@ export interface ActiveProject {
 
 export interface InitScreenProps {
   activeProject?: ActiveProject
+  workdir: string
   onContinue: (projectId: string) => void
-  onNewProject: (description: string) => void
+  onNewProject: (description: string, refs: FileReference[]) => void
   onQuit: () => void
 }
 
@@ -24,12 +27,30 @@ type InitStep = "select" | "input"
 
 import { generateGlobeFrames, computeGlobeDimensions, type GlobeCell } from "../globe.js"
 
-// Helper to render a line of globe cells with individual colors
+interface ColorSpan {
+  color: string
+  text: string
+}
+
+function batchByColor(cells: GlobeCell[]): ColorSpan[] {
+  const spans: ColorSpan[] = []
+  for (const cell of cells) {
+    const last = spans[spans.length - 1]
+    if (last && last.color === cell.color) {
+      last.text += cell.char
+    } else {
+      spans.push({ color: cell.color, text: cell.char })
+    }
+  }
+  return spans
+}
+
 function GlobeLine(props: { cells: GlobeCell[] }) {
+  const spans = createMemo(() => batchByColor(props.cells))
   return (
     <box flexDirection="row">
-      <For each={props.cells}>
-        {(cell) => <text fg={cell.color}>{cell.char}</text>}
+      <For each={spans()}>
+        {(span) => <text fg={span.color}>{span.text}</text>}
       </For>
     </box>
   )
@@ -45,7 +66,9 @@ export function InitScreen(props: InitScreenProps) {
   const hasActiveProject = createMemo(() => !!props.activeProject)
   const [step, setStep] = createSignal<InitStep>(hasActiveProject() ? "select" : "input")
   const [selectedIndex, setSelectedIndex] = createSignal(0)
-  const [description, setDescription] = createSignal("")
+  
+  const [inputRef, setInputRef] = createSignal<TextInputWithRefsRef | undefined>()
+  
   const [globeFrame, setGlobeFrame] = createSignal(0)
   const [globeFrames, setGlobeFrames] = createSignal<GlobeCell[][][]>([])
   const terminalDimensions = useTerminalDimensions()
@@ -112,6 +135,7 @@ export function InitScreen(props: InitScreenProps) {
       ]
     }
     return [
+      { key: "@", label: "add file" },
       { key: "enter", label: "submit" },
       { key: "esc", label: hasActiveProject() ? "back" : "quit" },
     ]
@@ -145,9 +169,12 @@ export function InitScreen(props: InitScreenProps) {
       }
     } else if (step() === "input") {
       if (keyName === "escape") {
+        // Don't handle ESC if autocomplete is visible - let it close the autocomplete first
+        if (inputRef()?.isAutocompleteVisible()) {
+          return
+        }
         if (hasActiveProject()) {
           setStep("select")
-          setDescription("")
         } else {
           props.onQuit()
         }
@@ -155,10 +182,10 @@ export function InitScreen(props: InitScreenProps) {
     }
   })
 
-  const handleInputSubmit = (value: string) => {
-    const trimmed = value.trim()
+  const handleInputSubmit = (text: string, refs: FileReference[]) => {
+    const trimmed = text.trim()
     if (trimmed.length > 0) {
-      props.onNewProject(trimmed)
+      props.onNewProject(trimmed, refs)
     }
   }
 
@@ -182,22 +209,22 @@ export function InitScreen(props: InitScreenProps) {
       >
         {/* Animated Globe Logo */}
         <Show when={globeFrames().length > 0}>
-          <box flexDirection="column" alignItems="center" marginBottom={isCompact() ? 0 : 2}>
+          <box flexDirection="column" alignItems="center" marginBottom={isCompact() ? 0 : 1}>
             <box flexDirection="column">
               <For each={globeFrames()[globeFrame()] ?? []}>
                 {(row) => <GlobeLine cells={row} />}
               </For>
             </box>
-            <text fg={colors.fg} marginTop={1}>GLOBEX CORPORATION</text>
-            <text fg={colors.fgDark}>Ralph builds, Wiggum approves</text>
+            <text fg={colors.fg}>GLOBEX CORPORATION</text>
+            <text fg={colors.fgDark}>Wiggum driven development; No vibes allowed.</text>
           </box>
         </Show>
         {/* Fallback when globe is too small */}
         <Show when={globeFrames().length === 0}>
-          <box flexDirection="column" alignItems="center" marginBottom={isCompact() ? 0 : 2}>
+          <box flexDirection="column" alignItems="center" marginBottom={isCompact() ? 0 : 1}>
             <text fg={colors.green}>GLOBEX</text>
             <text fg={colors.fg}>CORPORATION</text>
-            <text fg={colors.fgDark}>Ralph builds, Wiggum approves</text>
+            <text fg={colors.fgDark}>Wiggum driven development; No vibes allowed.</text>
           </box>
         </Show>
 
@@ -235,15 +262,15 @@ export function InitScreen(props: InitScreenProps) {
                 Describe your project:
               </text>
 
-              <TextInput
-                placeholder="Add authentication using JWT tokens..."
-                value={description()}
-                onInput={(value) => setDescription(value)}
+              <TextInputWithRefs
+                ref={(r) => setInputRef(r)}
+                placeholder="Add authentication using JWT tokens... (@ to reference files)"
+                workdir={props.workdir}
                 onSubmit={handleInputSubmit}
               />
 
               <text fg={colors.fgDark} marginTop={1}>
-                Be specific about what you want to build.
+                Be specific. Type @ to reference files.
               </text>
             </box>
           </Show>
@@ -251,6 +278,8 @@ export function InitScreen(props: InitScreenProps) {
       </box>
 
       <SimpleFooter hints={keyHints()} />
+
+      <AutocompleteOverlay inputRef={inputRef} />
     </box>
   )
 }

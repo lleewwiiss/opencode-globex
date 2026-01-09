@@ -221,34 +221,84 @@ type InitStep = "select" | "input"
 
 ---
 
-### 3. InterviewScreen (Future)
+### 3. InterviewScreen (Redesigned)
 
-**Purpose**: Bidirectional Q&A between agent and user.
+**Purpose**: Bidirectional Q&A between agent and user with structured JSON responses.
 
-**Layout**:
+> **See [STRUCTURED-INTERVIEW-UI.md](./STRUCTURED-INTERVIEW-UI.md) for comprehensive design documentation.**
+
+**Key Design Changes:**
+- Agent returns structured JSON instead of free-form markdown
+- Tab-based navigation between questions in a round
+- Per-question inputs with choice options and free-text
+- Inline file references with collapsible quotes
+- Severity indicators (HIGH/MEDIUM/LOW)
+
+**Layout (Text Question)**:
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│ ◑ my-project · interview                                        │
+│  Research Interview • Round 1                       00:03:42    │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│   Agent:                                                        │
-│   ┌─────────────────────────────────────────────────────────┐   │
-│   │ I found a 4-step write path in src/api/users.ts:42-67. │   │
-│   │ What happens if step 3 succeeds but step 4 fails?      │   │
-│   │ Where is this error case handled?                       │   │
-│   └─────────────────────────────────────────────────────────┘   │
+│  ┌───────────┬────────────────┬──────────────┐                  │
+│  │ ❯ Goals ✓ │  Architecture  │  Edge Cases  │                  │
+│  └───────────┴────────────────┴──────────────┘                  │
 │                                                                 │
-│   Your answer:                                                  │
-│   ┌─────────────────────────────────────────────────────────┐   │
-│   │ _                                                       │   │
-│   └─────────────────────────────────────────────────────────┘   │
+│  Goals                                                   HIGH   │
+│  ─────────────────────────────────────────────────────────────  │
+│  What is the main outcome this work should achieve?             │
 │                                                                 │
-│   Round 2/5 · 3 questions asked                                 │
+│  ▸ research.md:15-25                                            │
+│    "The system should handle concurrent edits..."               │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │ Enable real-time collaboration between users editing    │    │
+│  │ the same document with conflict resolution._            │    │
+│  └─────────────────────────────────────────────────────────┘    │
 │                                                                 │
 ├─────────────────────────────────────────────────────────────────┤
-│ (enter) submit  (esc) skip  (q) quit          Timebox: 15:23    │
+│  ⇥ tab: next  •  ⇧⇥: prev  •  ↵: submit round  •  esc: quit   │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+**Layout (Choice Question)**:
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Research Interview • Round 1                       00:04:15    │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌───────────┬──────────────────┬──────────────┐                │
+│  │  Goals ✓  │ ❯ Architecture   │  Edge Cases  │                │
+│  └───────────┴──────────────────┴──────────────┘                │
+│                                                                 │
+│  Architecture                                            HIGH   │
+│  ─────────────────────────────────────────────────────────────  │
+│  Does the architecture in research.md match your mental model?  │
+│                                                                 │
+│    1. Yes, it matches                                           │
+│       The documented architecture is accurate                   │
+│  ❯ 2. Partially                                                 │
+│       Some aspects are correct, but there are gaps              │
+│    3. No, it's different                                        │
+│       The actual architecture differs significantly             │
+│    4. Type your own answer                                      │
+│       ┌─────────────────────────────────────────────────────┐   │
+│       │ _                                                   │   │
+│       └─────────────────────────────────────────────────────┘   │
+│                                                                 │
+├─────────────────────────────────────────────────────────────────┤
+│  ↑↓: select option  •  ⇥: next question  •  ↵: confirm         │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Keyboard Navigation:**
+| Context | Key | Action |
+|---------|-----|--------|
+| Any | `Tab` | Next question |
+| Any | `Shift+Tab` | Previous question |
+| Text input | Arrow keys | Navigate within text |
+| Choice question | `↑` / `↓` | Select option |
+| Choice question | Start typing | Activate custom input |
 
 ---
 
@@ -278,37 +328,49 @@ await streamSessionEvents({ client, sessionId, callbacks, signal })
 
 ### Interview Client
 
-**Purpose**: Interactive Q&A with user
+**Purpose**: Interactive Q&A with user using structured JSON protocol
 
 **Characteristics**:
-- Agent generates questions → displayed in TUI
-- User types answer → sent back to same session
-- Multiple rounds until convergence
+- Agent returns structured JSON with questions, options, and metadata
+- TUI renders rich form UI with tabs, choices, and text inputs
+- User answers sent back as structured JSON payload
+- Multiple rounds until convergence (agent sets `complete: true`)
 - Session stays active across Q&A exchanges
+- Malformed JSON triggers retry with correction request
 
-**Key Difference**: Unlike background clients, interview sessions require sending multiple prompts to the same session:
+**Key Difference**: Unlike background clients, interview sessions use structured JSON for deterministic parsing:
 
 ```typescript
-// Initial prompt starts interview
+// Initial prompt starts interview (agent returns JSON)
 const sessionId = await spawnAgentSession(client, "globex-interview", INTERVIEW_PROMPT, model)
 
-// Subscribe to events to capture agent questions
+// Subscribe to events to capture agent response
 for await (const event of events.stream) {
   if (event.type === "message.part.updated" && part.type === "text") {
-    // Display agent's question in TUI
-    displayQuestion(part.content)
+    // Parse structured JSON response
+    const round = parseInterviewRound(part.content)
+    if (round.success) {
+      // Display questions in TUI with tabs, options, references
+      displayRound(round.data)
+    } else {
+      // Ask agent to fix malformed response
+      await retryWithCorrection(sessionId, round.error)
+    }
   }
   if (event.type === "session.idle") {
-    // Agent finished speaking, wait for user input
-    const userAnswer = await waitForUserInput()
-    // Send answer back to same session
+    // Agent finished, wait for user to complete all questions
+    const answers = await collectUserAnswers()
+    
+    // Send structured answer payload back
     await client.session.prompt({
       sessionID: sessionId,
-      parts: [{ type: "text", text: userAnswer }],
+      parts: [{ type: "text", text: JSON.stringify(answers) }],
     })
   }
 }
 ```
+
+**JSON Protocol**: See [STRUCTURED-INTERVIEW-UI.md](./STRUCTURED-INTERVIEW-UI.md) for complete schema.
 
 ### Loop Client
 

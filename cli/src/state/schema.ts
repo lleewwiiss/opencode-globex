@@ -105,3 +105,11 @@ export const FeaturesSchema = Schema.Struct({
   summary: Schema.optional(FeaturesSummarySchema),
 })
 export type Features = Schema.Schema.Type<typeof FeaturesSchema>
+
+export const FileReferenceSchema = Schema.Struct({
+  path: Schema.String,
+  lineStart: Schema.optional(Schema.Number),
+  lineEnd: Schema.optional(Schema.Number),
+  displayName: Schema.optional(Schema.String),
+})
+export type FileReference = Schema.Schema.Type<typeof FileReferenceSchema>

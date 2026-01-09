@@ -15,6 +15,7 @@ import { runFeaturesPhase } from "./phases/features.js"
 import { getProgressStats, getFeatureCategories } from "./features/manager.js"
 import { log } from "./util/log.js"
 import type { Phase, ToolEvent } from "./state/types.js"
+import type { FileReference } from "./state/schema.js"
 import { Effect } from "effect"
 
 const DEFAULT_MODEL = "anthropic/claude-opus-4-5"
@@ -556,8 +557,11 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
       }
     }
 
-    let resolveAction: ((action: { type: "continue"; projectId: string } | { type: "new"; description: string }) => void) | null = null
-    const actionPromise = new Promise<{ type: "continue"; projectId: string } | { type: "new"; description: string }>((resolve) => {
+    type InitAction = 
+      | { type: "continue"; projectId: string }
+      | { type: "new"; description: string; refs: FileReference[] }
+    let resolveAction: ((action: InitAction) => void) | null = null
+    const actionPromise = new Promise<InitAction>((resolve) => {
       resolveAction = resolve
     })
 
@@ -596,8 +600,8 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
       onContinue: (id) => {
         if (resolveAction) resolveAction({ type: "continue", projectId: id })
       },
-      onNewProject: (description) => {
-        if (resolveAction) resolveAction({ type: "new", description })
+      onNewProject: (description, refs) => {
+        if (resolveAction) resolveAction({ type: "new", description, refs })
       },
       onInterviewAnswer: async (answer) => {
         if (interviewSubmitAnswer) {
@@ -625,7 +629,7 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
       },
     }
 
-    const { exitPromise, setState } = await startApp(initialState, callbacks)
+    const { exitPromise, setState } = await startApp(initialState, callbacks, workdir)
 
     const action = await Promise.race([
       actionPromise,

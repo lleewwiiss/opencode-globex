@@ -11,6 +11,7 @@ import { InterviewScreen } from "./components/screens/interview.js"
 import { ConfirmScreen } from "./components/screens/confirm.js"
 import { colors } from "./components/colors.js"
 import type { Phase, ToolEvent } from "./state/types.js"
+import type { FileReference } from "./state/schema.js"
 
 export type Screen = "init" | "background" | "interview" | "confirm" | "execute"
 
@@ -74,7 +75,7 @@ export interface AppState {
 export interface AppCallbacks {
   onQuit: () => void
   onContinue: (projectId: string) => void
-  onNewProject: (description: string) => void
+  onNewProject: (description: string, refs: FileReference[]) => void
   onInterviewAnswer?: (answer: string) => void
   onConfirmExecute?: () => void
   onKeyboardEvent?: () => void
@@ -84,6 +85,7 @@ export interface AppCallbacks {
 export interface AppProps {
   initialState: AppState
   callbacks: AppCallbacks
+  workdir: string
 }
 
 export interface StartAppResult {
@@ -142,7 +144,8 @@ export function createInitialAppState(screen: Screen = "init"): AppState {
 
 export async function startApp(
   initialState: AppState,
-  callbacks: AppCallbacks
+  callbacks: AppCallbacks,
+  workdir: string = process.cwd()
 ): Promise<StartAppResult> {
   let exitResolve!: () => void
   const exitPromise = new Promise<void>((resolve) => {
@@ -162,6 +165,7 @@ export async function startApp(
       <App
         initialState={initialState}
         callbacks={wrappedCallbacks}
+        workdir={workdir}
       />
     ),
     {
@@ -301,6 +305,7 @@ export function App(props: AppProps) {
       <Match when={screen() === "init"}>
         <InitScreen
           activeProject={state().init.activeProject}
+          workdir={props.workdir}
           onContinue={props.callbacks.onContinue}
           onNewProject={props.callbacks.onNewProject}
           onQuit={handleQuit}
