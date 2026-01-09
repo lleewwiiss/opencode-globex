@@ -58,6 +58,7 @@ function createLoopCallbacks(
         type: "separator",
         text: `iteration ${iteration}: ${featureId}`,
         timestamp: Date.now(),
+        commitCount: 0,
       }
       setState((prev) => ({
         ...prev,
@@ -195,14 +196,23 @@ function createLoopCallbacks(
     onError: () => {
       // Errors are logged to debug.log - no UI event needed
     },
-    onCommitsUpdated: (commits) => {
-      setState((prev) => ({
-        ...prev,
-        execute: {
-          ...prev.execute,
-          commits,
-        },
-      }))
+    onCommitsUpdated: (commits, iteration) => {
+      setState((prev) => {
+        const events = prev.execute.events.map((e) => {
+          if (e.type === "separator" && e.iteration === iteration) {
+            return { ...e, commitCount: commits }
+          }
+          return e
+        })
+        return {
+          ...prev,
+          execute: {
+            ...prev.execute,
+            commits,
+            events,
+          },
+        }
+      })
     },
     onDiffUpdated: (linesAdded, linesRemoved) => {
       setState((prev) => ({

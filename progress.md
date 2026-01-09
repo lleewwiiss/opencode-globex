@@ -1,5 +1,34 @@
 # Progress
 
+## Feature: registry-phase-sync
+
+### Status: complete
+
+### Changes Made
+- **cli/src/state/persistence.ts:6**: Added import for `getProjectFromRegistry`, `upsertProjectInRegistry` from registry.ts
+- **cli/src/state/persistence.ts:77-81**: Added registry sync logic in `updatePhase` - fetches entry, updates phase if exists
+
+### Implementation
+Inside `updatePhase` after writing state:
+1. Fetch registry entry via `getProjectFromRegistry(projectId)` with `Effect.orElseSucceed(() => undefined)` for silent skip
+2. If entry exists, call `upsertProjectInRegistry(projectId, { ...entry, phase })` with same error tolerance
+
+### Verification
+- Build: ✓
+- Tests: ✓ (24 pass in state tests)
+- Lint: ✓ (2 pre-existing warnings, 0 errors)
+
+### Acceptance Criteria
+- [x] updatePhase in persistence.ts also updates registry entry phase
+- [x] Import registry functions in persistence.ts
+- [x] Silently skip if project not in registry
+- [x] Build passes
+
+### Files Changed
+- cli/src/state/persistence.ts
+
+---
+
 ## Feature: ralph-split-workdir
 
 ### Status: complete

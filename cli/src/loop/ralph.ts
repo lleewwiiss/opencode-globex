@@ -50,7 +50,7 @@ export interface RalphLoopCallbacks {
   onResumed: () => void
   onComplete: (completedCount: number, totalCount: number) => void
   onError: (error: Error) => void
-  onCommitsUpdated: (commits: number) => void
+  onCommitsUpdated: (commits: number, iteration: number) => void
   onDiffUpdated: (linesAdded: number, linesRemoved: number) => void
   onToolEvent?: (event: ToolEvent) => void
   onIdleChanged?: (isIdle: boolean, agent: AgentName, iteration: number) => void
@@ -401,7 +401,7 @@ export async function runRalphLoop(
         // Update commit count and diff stats in TUI
         const commits = await getCommitsSince(codeWorkdir, initialCommitHash)
         const diffStats = await getDiffStatsSince(codeWorkdir, initialCommitHash)
-        callbacks.onCommitsUpdated(commits.length)
+        callbacks.onCommitsUpdated(commits.length, iteration)
         callbacks.onDiffUpdated(diffStats.added, diffStats.removed)
         log("ralph", "Stats updated", { commits: commits.length, added: diffStats.added, removed: diffStats.removed })
         

@@ -3,6 +3,7 @@ import { FileSystem } from "@effect/platform"
 import { NodeFileSystem } from "@effect/platform-node"
 import { Schema } from "effect"
 import type { GlobexState, Phase, Approval } from "./types.js"
+import { getProjectFromRegistry, upsertProjectInRegistry } from "./registry.js"
 
 const GLOBEX_DIR = ".globex"
 const PROJECTS_DIR = "projects"
@@ -75,6 +76,11 @@ export const CliPersistenceLive = Layer.effect(
         const state = yield* readState(workdir, projectId)
         const updated = { ...state, currentPhase: phase }
         yield* writeState(workdir, projectId, updated)
+        // Sync phase to registry (silently skip if not in registry)
+        const entry = yield* getProjectFromRegistry(projectId).pipe(Effect.orElseSucceed(() => undefined))
+        if (entry) {
+          yield* upsertProjectInRegistry(projectId, { ...entry, phase }).pipe(Effect.orElseSucceed(() => undefined))
+        }
         return { ...updated, updatedAt: new Date().toISOString() }
       })
 
