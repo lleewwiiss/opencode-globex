@@ -21,11 +21,28 @@ export interface DiffStats {
   files: string[]
 }
 
+export interface Worktree {
+  path: string
+  branch: string
+  commit: string
+  isLocked: boolean
+}
+
+export interface MergeResult {
+  success: boolean
+  conflicts: string[]
+  commitHash: string | null
+}
+
 export class GitService extends Context.Tag("GitService")<GitService, {
   readonly getHeadHash: (workdir: string) => Effect.Effect<string, GitError>
   readonly getCommitsSince: (workdir: string, hash: string) => Effect.Effect<Commit[], GitError>
   readonly getDiffStats: (workdir: string) => Effect.Effect<DiffStats, GitError>
   readonly commitChanges: (workdir: string, message: string) => Effect.Effect<string, GitError>
+  readonly createWorktree: (workdir: string, path: string, branch: string) => Effect.Effect<Worktree, GitError>
+  readonly removeWorktree: (workdir: string, path: string) => Effect.Effect<void, GitError>
+  readonly listWorktrees: (workdir: string) => Effect.Effect<Worktree[], GitError>
+  readonly mergeWorktree: (workdir: string, branch: string) => Effect.Effect<MergeResult, GitError>
 }>() {}
 
 export const GitServiceLive = Layer.effect(
@@ -95,7 +112,73 @@ export const GitServiceLive = Layer.effect(
         return yield* getHeadHash(workdir)
       })
 
-    return { getHeadHash, getCommitsSince, getDiffStats, commitChanges }
+    const createWorktree = (workdir: string, path: string, branch: string): Effect.Effect<Worktree, GitError> =>
+      Effect.gen(function* () {
+        yield* runGit(["worktree", "add", "-b", branch, path], workdir)
+        const commit = yield* runGit(["rev-parse", "HEAD"], path)
+        return { path, branch, commit, isLocked: false }
+      })
+
+    const removeWorktree = (workdir: string, path: string): Effect.Effect<void, GitError> =>
+      Effect.gen(function* () {
+        yield* runGit(["worktree", "remove", path], workdir)
+      })
+
+    const listWorktrees = (workdir: string): Effect.Effect<Worktree[], GitError> =>
+      Effect.gen(function* () {
+        const output = yield* runGit(["worktree", "list", "--porcelain"], workdir)
+        if (!output) return []
+        const worktrees: Worktree[] = []
+        let current: Partial<Worktree> = {}
+        for (const line of output.split("\n")) {
+          if (line.startsWith("worktree ")) {
+            if (current.path) worktrees.push(current as Worktree)
+            current = { path: line.slice(9), isLocked: false }
+          } else if (line.startsWith("HEAD ")) {
+            current.commit = line.slice(5)
+          } else if (line.startsWith("branch refs/heads/")) {
+            current.branch = line.slice(18)
+          } else if (line === "locked") {
+            current.isLocked = true
+          } else if (line === "detached") {
+            current.branch = "(detached)"
+          }
+        }
+        if (current.path) worktrees.push(current as Worktree)
+        return worktrees
+      })
+
+    const mergeWorktree = (workdir: string, branch: string): Effect.Effect<MergeResult, GitError> =>
+      Effect.gen(function* () {
+        const result = yield* runGit(["merge", "--no-edit", branch], workdir).pipe(
+          Effect.map(() => ({
+            success: true,
+            conflicts: [] as string[],
+            commitHash: null as string | null
+          })),
+          Effect.catchAll((err) => {
+            if (err.message.includes("CONFLICT")) {
+              return Effect.succeed({
+                success: false,
+                conflicts: [] as string[],
+                commitHash: null as string | null
+              })
+            }
+            return Effect.fail(err)
+          })
+        )
+        if (result.success) {
+          const commitHash = yield* getHeadHash(workdir)
+          return { ...result, commitHash }
+        }
+        const statusOutput = yield* runGit(["diff", "--name-only", "--diff-filter=U"], workdir).pipe(
+          Effect.catchAll(() => Effect.succeed(""))
+        )
+        const conflicts = statusOutput.split("\n").filter(Boolean)
+        return { ...result, conflicts }
+      })
+
+    return { getHeadHash, getCommitsSince, getDiffStats, commitChanges, createWorktree, removeWorktree, listWorktrees, mergeWorktree }
   })
 )
 
