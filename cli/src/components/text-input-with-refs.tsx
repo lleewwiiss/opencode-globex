@@ -188,17 +188,20 @@ export function TextInputWithRefs(props: TextInputWithRefsProps) {
         const next = selectedOption() <= 0 ? opts.length - 1 : selectedOption() - 1
         setSelectedOption(next)
         e.preventDefault()
+        e.stopPropagation()
         return
       }
       if (name === "down" || (ctrlOnly && name === "n")) {
         const next = selectedOption() >= opts.length - 1 ? 0 : selectedOption() + 1
         setSelectedOption(next)
         e.preventDefault()
+        e.stopPropagation()
         return
       }
       if (name === "escape") {
         setAutocompleteVisible(false)
         e.preventDefault()
+        e.stopPropagation()
         return
       }
       if (name === "return") {
@@ -206,6 +209,7 @@ export function TextInputWithRefs(props: TextInputWithRefsProps) {
         if (opt) {
           selectOption(opt)
           e.preventDefault()
+          e.stopPropagation()
           return
         }
       }
@@ -218,6 +222,7 @@ export function TextInputWithRefs(props: TextInputWithRefsProps) {
             selectOption(opt)
           }
           e.preventDefault()
+          e.stopPropagation()
           return
         }
       }

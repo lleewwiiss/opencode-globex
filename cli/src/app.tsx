@@ -187,6 +187,7 @@ export async function startApp(
 function ExecuteScreen(props: {
   state: ExecuteState
   setState: Setter<AppState>
+  workdir: string
   onQuit: () => void
   onKeyboardEvent?: () => void
   onPauseToggle?: (paused: boolean) => void
@@ -269,7 +270,7 @@ function ExecuteScreen(props: {
         paused={paused()}
       />
 
-      <Log events={events()} isIdle={isIdle()} currentAgent={currentAgent()} />
+      <Log events={events()} isIdle={isIdle()} currentAgent={currentAgent()} workdir={props.workdir} />
 
       <Footer
         commits={commits()}
@@ -340,6 +341,7 @@ export function App(props: AppProps) {
         <ExecuteScreen
           state={state().execute}
           setState={setState}
+          workdir={props.workdir}
           onQuit={handleQuit}
           onKeyboardEvent={props.callbacks.onKeyboardEvent}
           onPauseToggle={props.callbacks.onPauseToggle}

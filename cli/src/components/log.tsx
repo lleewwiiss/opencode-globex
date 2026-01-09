@@ -1,11 +1,48 @@
 /** @jsxImportSource @opentui/solid */
 import { For, Match, Switch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
+import { link } from "@opentui/core"
 import { colors, TOOL_ICONS } from "./colors"
 import { formatDuration } from "../util/time"
 import type { ToolEvent } from "../state/types"
+import * as path from "node:path"
 
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 const DEFAULT_ICON = "\u2699"
+
+interface TextSegment {
+  type: "text" | "file"
+  text: string
+  url?: string
+}
+
+function parseTextWithFilePaths(text: string, workdir: string): TextSegment[] {
+  const segments: TextSegment[] = []
+  const filePathRegex = /(?:^|\s)((?:\.\/|\.\.\/|\/)?(?:[\w.-]+\/)*[\w.-]+\.[a-zA-Z0-9]+(?::\d+(?:-\d+)?)?)/g
+  let lastIndex = 0
+  let match
+
+  while ((match = filePathRegex.exec(text)) !== null) {
+    const filePath = match[1]
+    const matchStart = match.index + (match[0].length - filePath.length)
+    
+    if (matchStart > lastIndex) {
+      segments.push({ type: "text", text: text.slice(lastIndex, matchStart) })
+    }
+    
+    const [pathPart, lineRange] = filePath.split(":")
+    const absolutePath = pathPart.startsWith("/") ? pathPart : path.join(workdir, pathPart)
+    const fileUrl = lineRange ? `file://${absolutePath}#L${lineRange}` : `file://${absolutePath}`
+    
+    segments.push({ type: "file", text: filePath, url: fileUrl })
+    lastIndex = matchStart + filePath.length
+  }
+
+  if (lastIndex < text.length) {
+    segments.push({ type: "text", text: text.slice(lastIndex) })
+  }
+
+  return segments.length > 0 ? segments : [{ type: "text", text }]
+}
 
 export function getEventKey(event: ToolEvent): string {
   return `${event.iteration}-${event.timestamp}`
@@ -33,6 +70,7 @@ export type LogProps = {
   events: ToolEvent[]
   isIdle: boolean
   currentAgent: "idle" | "ralph" | "wiggum"
+  workdir: string
 }
 
 function Spinner(props: { isIdle: boolean; currentAgent: "idle" | "ralph" | "wiggum" }) {
@@ -98,14 +136,30 @@ function SeparatorEvent(props: { event: ToolEvent }) {
   )
 }
 
-function ToolEventItem(props: { event: ToolEvent }) {
+function ToolEventItem(props: { event: ToolEvent; workdir: string }) {
   const icon = createMemo(() => props.event.icon || DEFAULT_ICON)
   const iconColor = createMemo(() => getToolColor(props.event.icon))
+  const segments = createMemo(() => parseTextWithFilePaths(props.event.text, props.workdir))
 
   return (
     <box width="100%" flexDirection="row">
       <text fg={iconColor()}>{icon()}</text>
-      <text fg={colors.fg}> {props.event.text}</text>
+      <text>
+        <For each={segments()}>
+          {(segment) => (
+            <Switch>
+              <Match when={segment.type === "file"}>
+                <span style={{ fg: colors.blue, underline: true }}>
+                  {link(segment.url!)(segment.text)}
+                </span>
+              </Match>
+              <Match when={segment.type === "text"}>
+                <span style={{ fg: colors.fg }}>{segment.text}</span>
+              </Match>
+            </Switch>
+          )}
+        </For>
+      </text>
     </box>
   )
 }
@@ -139,7 +193,7 @@ export function Log(props: LogProps) {
               <SeparatorEvent event={event} />
             </Match>
             <Match when={event.type === "tool"}>
-              <ToolEventItem event={event} />
+              <ToolEventItem event={event} workdir={props.workdir} />
             </Match>
           </Switch>
         )}

@@ -1,5 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { For, Switch, Match } from "solid-js"
+import { link } from "@opentui/core"
 import { colors } from "./colors.js"
 import { log } from "../util/log.js"
 
@@ -106,11 +107,63 @@ function stripInlineFormatting(text: string): string {
     .replace(/`(.+?)`/g, "$1")
 }
 
+interface TextSegment {
+  type: "text" | "link"
+  text: string
+  url?: string
+}
+
+function parseTextWithLinks(text: string): TextSegment[] {
+  const segments: TextSegment[] = []
+  const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g
+  let lastIndex = 0
+  let match
+
+  while ((match = linkRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      segments.push({ type: "text", text: text.slice(lastIndex, match.index) })
+    }
+    segments.push({ type: "link", text: match[1], url: match[2] })
+    lastIndex = match.index + match[0].length
+  }
+
+  if (lastIndex < text.length) {
+    segments.push({ type: "text", text: text.slice(lastIndex) })
+  }
+
+  return segments.length > 0 ? segments : [{ type: "text", text }]
+}
+
+function RichText(props: { text: string; color?: string }) {
+  const segments = () => parseTextWithLinks(stripInlineFormatting(props.text))
+  const textColor = () => props.color ?? colors.fg
+
+  return (
+    <text>
+      <For each={segments()}>
+        {(segment) => (
+          <Switch>
+            <Match when={segment.type === "link"}>
+              <span style={{ fg: colors.blue, underline: true }}>
+                {link(segment.url!)(segment.text)}
+              </span>
+            </Match>
+            <Match when={segment.type === "text"}>
+              <span style={{ fg: textColor() }}>{segment.text}</span>
+            </Match>
+          </Switch>
+        )}
+      </For>
+    </text>
+  )
+}
+
 function QuestionRow(props: { index: number; text: string }) {
   return (
     <box flexDirection="column" paddingTop={1}>
       <box flexDirection="row" gap={1}>
-        <text><span style={{ fg: colors.yellow }}>{props.index}.</span> <span style={{ fg: colors.fg, bold: true }}>{stripInlineFormatting(props.text)}</span></text>
+        <text><span style={{ fg: colors.yellow }}>{props.index}.</span></text>
+        <RichText text={props.text} />
       </box>
     </box>
   )
@@ -119,7 +172,8 @@ function QuestionRow(props: { index: number; text: string }) {
 function BulletRow(props: { text: string }) {
   return (
     <box flexDirection="row" gap={1} paddingLeft={2}>
-      <text><span style={{ fg: colors.cyan }}>•</span> <span style={{ fg: colors.fg }}>{stripInlineFormatting(props.text)}</span></text>
+      <text><span style={{ fg: colors.cyan }}>•</span></text>
+      <RichText text={props.text} />
     </box>
   )
 }
@@ -144,7 +198,8 @@ function CodeBlock(props: { lines: string[] }) {
 function NoteRow(props: { text: string }) {
   return (
     <box flexDirection="row" gap={1} paddingLeft={2}>
-      <text><span style={{ fg: colors.blue }}>▍</span> <span style={{ fg: colors.fgDark }}>{stripInlineFormatting(props.text)}</span></text>
+      <text><span style={{ fg: colors.blue }}>▍</span></text>
+      <RichText text={props.text} color={colors.fgDark} />
     </box>
   )
 }
@@ -161,7 +216,7 @@ function HeaderRow(props: { text: string; level: number }) {
 function ParagraphRow(props: { text: string }) {
   return (
     <box paddingLeft={2}>
-      <text fg={colors.fg}>{stripInlineFormatting(props.text)}</text>
+      <RichText text={props.text} />
     </box>
   )
 }
