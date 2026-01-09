@@ -7,7 +7,10 @@ import * as fs from "node:fs/promises"
 import { readFeatures, readFeaturesWithSummary } from "./state/features-persistence.js"
 import { loadConfig } from "./config.js"
 import { runRalphLoop, type RalphLoopCallbacks, type IterationResult } from "./loop/ralph.js"
-import { getHeadHash, getCommitsSince, getDiffStatsSince } from "./git.js"
+import { getHeadHash, getCommitsSince, getDiffStatsSince, createWorktree } from "./git.js"
+import { upsertProject, getProject } from "./state/registry.js"
+import * as os from "node:os"
+import * as path from "node:path"
 import { createSignal, removeSignal } from "./loop/signals.js"
 import { runResearchPhase } from "./phases/research.js"
 import { runResearchInterviewPhase } from "./phases/research-interview.js"
@@ -22,6 +25,20 @@ import { Effect } from "effect"
 
 const DEFAULT_MODEL = "anthropic/claude-opus-4-5"
 const DEFAULT_VARIANT = "max"
+
+/**
+ * Returns the worktree path for a project at ~/.globex/workspaces/<projectId>/
+ */
+export function getWorktreePath(projectId: string): string {
+  return path.join(os.homedir(), ".globex", "workspaces", projectId)
+}
+
+/**
+ * Returns the branch name for a project worktree: globex/<projectId>
+ */
+export function getWorktreeBranch(projectId: string): string {
+  return `globex/${projectId}`
+}
 
 export interface GlobexCliOptions {
   projectId?: string
@@ -564,25 +581,83 @@ async function transitionToExecute(
   workdir: string,
   projectId: string,
   model: string,
-  signal: AbortSignal
+  signal: AbortSignal,
+  useWorktree = false
 ): Promise<void> {
   let state = await loadState(workdir, projectId)
   const phase = state.currentPhase
   const features = await readFeatures(workdir, projectId)
   const progress = getProgressStats(features)
 
+  // Determine the effective working directory (worktree or current)
+  let codeWorkdir = workdir
+
+  // Handle worktree creation if requested and not already set up
+  if (useWorktree && !state.workspace?.worktreePath) {
+    const worktreePath = getWorktreePath(projectId)
+    const branchName = getWorktreeBranch(projectId)
+
+    try {
+      // Create the worktree
+      await createWorktree(workdir, worktreePath, branchName)
+      log("index", "Created worktree for execution", { projectId, worktreePath, branchName })
+
+      // Update state with workspace info
+      state = {
+        ...state,
+        workspace: {
+          type: "worktree",
+          worktreePath,
+          branchName,
+          createdAt: new Date().toISOString(),
+        },
+      }
+      await saveState(workdir, projectId, state)
+
+      // Update registry with worktree info
+      const existingEntry = await getProject(projectId)
+      if (existingEntry) {
+        await upsertProject(projectId, {
+          ...existingEntry,
+          worktreePath,
+          branchName,
+        })
+      }
+
+      codeWorkdir = worktreePath
+    } catch (err) {
+      // Fallback to current directory on failure
+      log("index", "Failed to create worktree, falling back to current dir", {
+        projectId,
+        error: String(err),
+      })
+      // Update state to mark workspace as current
+      state = {
+        ...state,
+        workspace: {
+          type: "current",
+        },
+      }
+      await saveState(workdir, projectId, state)
+    }
+  } else if (state.workspace?.worktreePath) {
+    // Resume existing worktree
+    codeWorkdir = state.workspace.worktreePath
+    log("index", "Resuming with existing worktree", { projectId, worktreePath: codeWorkdir })
+  }
+
   // Get or create initial commit hash for tracking cumulative stats
   let initialCommitHash = state.initialCommitHash
   if (!initialCommitHash) {
-    initialCommitHash = await getHeadHash(workdir)
+    initialCommitHash = await getHeadHash(codeWorkdir)
     state = { ...state, initialCommitHash }
     await saveState(workdir, projectId, state)
     log("index", "Saved initial commit hash", { projectId, initialCommitHash })
   }
 
   // Load cumulative git stats from initial commit
-  const commits = await getCommitsSince(workdir, initialCommitHash)
-  const diffStats = await getDiffStatsSince(workdir, initialCommitHash)
+  const commits = await getCommitsSince(codeWorkdir, initialCommitHash)
+  const diffStats = await getDiffStatsSince(codeWorkdir, initialCommitHash)
   log("index", "Loaded git stats on resume", {
     commits: commits.length,
     linesAdded: diffStats.added,
@@ -606,7 +681,7 @@ async function transitionToExecute(
   }))
 
   const ctx: PhaseContext = {
-    workdir,
+    workdir: codeWorkdir,
     projectId,
     model,
     setState,
