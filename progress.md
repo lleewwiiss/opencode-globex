@@ -1,6 +1,29 @@
 # Progress
 
-## Feature: gitservice-worktree-implementations
+## Feature: git-worktree-tests
+
+### Status: complete
+
+### Changes Made
+- **cli/tests/git-worktree.test.ts:21-33**: Fixed path resolution using `fs.realpath(os.tmpdir())` to handle macOS symlinks (`/var` -> `/private/var`), added `stdio: "ignore"` to git commands
+
+### Tests Implemented
+1. `createWorktree` > creates directory and branch - verifies return value and directory creation
+2. `listWorktrees` > returns created worktree - verifies worktree appears in list with correct branch
+3. `listWorktrees` > returns main worktree - verifies main repo worktree is listed
+4. `removeWorktree` > removes directory - verifies directory deletion and list update
+
+### Verification
+- Build: ✓
+- Tests: ✓ (79 pass)
+- Lint: ✓ (3 warnings, 0 errors)
+
+### Files Changed
+- cli/tests/git-worktree.test.ts (1 edit - path resolution fix)
+
+---
+
+## Feature: gitservice-worktree-implementations (previous)
 
 ### Status: complete
 
