@@ -43,7 +43,7 @@ function SpinnerInline(props: { frame: number; currentAgent: "idle" | "ralph" | 
   }
 
   return (
-    <box width="100%" flexDirection="row" paddingTop={1}>
+    <box width="100%" flexDirection="row" paddingTop={1} paddingLeft={1}>
       <text fg={colors.cyan}>{SPINNER_FRAMES[props.frame]}</text>
       <text fg={colors.fgMuted}> {message()}</text>
     </box>

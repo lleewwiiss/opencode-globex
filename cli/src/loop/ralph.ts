@@ -262,9 +262,13 @@ export async function runRalphLoop(
   const { client, workdir, projectId, model, initialCommitHash } = ctx
   const completedFeatures: string[] = []
   const blockedFeatures: string[] = []
-  let iteration = 0
+  
+  // Load features to determine starting iteration (resume from where we left off)
+  const initialFeatures = await readFeatures(workdir, projectId)
+  const completedCount = initialFeatures.filter((f) => f.passes || f.blocked).length
+  let iteration = completedCount
 
-  log("ralph", "runRalphLoop started", { projectId, model, initialCommitHash })
+  log("ralph", "runRalphLoop started", { projectId, model, initialCommitHash, startingIteration: iteration })
 
   try {
     while (!signal?.aborted) {

@@ -180,3 +180,33 @@ Tests use mocked HOME directory via `spyOn(os, "homedir")` to isolate registry f
 
 ### Files Changed
 - cli/tests/state/registry.test.ts (new file)
+
+---
+
+## Feature: cli-status-command
+
+### Status: complete
+
+### Changes Made
+- **cli/bin/globex.ts:67-106**: Added `status` subcommand (already implemented in file)
+
+### Implementation
+The status command was already implemented, meeting all acceptance criteria:
+- Calls `loadRegistry()` from registry.ts to get projects from `~/.globex/registry.json`
+- Displays columns: ID (33 chars), PHASE (18 chars), PATH
+- Uses `→` arrow for active project (from `getActiveProject(workdir)`)
+- Shows `(current)` for projects where `entry.repoPath === workdir` and no worktree
+
+### Verification
+- Build: ✓
+- Tests: ✓ (176 pass)
+- Lint: ✓ (1 pre-existing warning, 0 errors)
+
+### Acceptance Criteria
+- [x] globex status lists all projects from ~/.globex/registry.json
+- [x] Shows project ID, phase, workspace path columns
+- [x] Marks active project with arrow indicator
+- [x] Shows (current) for projects in current repo without worktree
+
+### Files Changed
+- cli/bin/globex.ts (pre-existing implementation verified)

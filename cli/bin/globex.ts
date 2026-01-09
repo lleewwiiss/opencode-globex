@@ -4,7 +4,7 @@ import { hideBin } from "yargs/helpers"
 import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync } from "fs"
 import { join } from "path"
 import { main } from "../src/index.js"
-import { upsertProject, type RegistryEntry } from "../src/state/registry.js"
+import { upsertProject, loadRegistry, type RegistryEntry } from "../src/state/registry.js"
 
 const DEFAULT_MODEL = "anthropic/claude-opus-4-5"
 const GLOBEX_DIR = ".globex"
@@ -64,6 +64,46 @@ const workdir = process.cwd()
 await yargs(hideBin(process.argv))
   .scriptName("globex")
   .usage("$0 <command> [options]")
+  .command(
+    "status",
+    "List all globex projects",
+    () => {},
+    async () => {
+      const registry = await loadRegistry()
+      const projects = Object.entries(registry.projects)
+      
+      if (projects.length === 0) {
+        console.log("No projects found.")
+        return
+      }
+      
+      const activeProjectId = getActiveProject(workdir)
+      
+      // Header
+      console.log("   ID                              PHASE              PATH")
+      console.log("   ─────────────────────────────── ────────────────── ─────────────────────────────")
+      
+      for (const [id, entry] of projects) {
+        const isActive = id === activeProjectId
+        const arrow = isActive ? "→" : " "
+        
+        // Determine path display
+        let pathDisplay: string
+        if (entry.worktreePath) {
+          pathDisplay = entry.worktreePath
+        } else if (entry.repoPath === workdir) {
+          pathDisplay = "(current)"
+        } else {
+          pathDisplay = entry.repoPath
+        }
+        
+        const idCol = id.padEnd(33)
+        const phaseCol = entry.phase.padEnd(18)
+        
+        console.log(`${arrow}  ${idCol} ${phaseCol} ${pathDisplay}`)
+      }
+    }
+  )
   .command(
     "init <description>",
     "Initialize a new globex project",
