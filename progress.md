@@ -210,3 +210,36 @@ The status command was already implemented, meeting all acceptance criteria:
 
 ### Files Changed
 - cli/bin/globex.ts (pre-existing implementation verified)
+
+---
+
+## Feature: cli-switch-command
+
+### Status: complete
+
+### Changes Made
+- **cli/bin/globex.ts:7**: Added `getProject` import from registry.ts
+- **cli/bin/globex.ts:107-143**: Added `switch <project-id>` subcommand
+
+### Implementation
+Follows yargs command pattern from lines 66-127 (status and init commands):
+- Positional arg `<project-id>` with demandOption
+- Looks up project via `getProject(projectId)` async wrapper
+- If not found: error message + exit(1)
+- If in current repo: sets active-project, prints cd if worktree exists
+- If in different repo: prints cd to worktree or repoPath
+
+### Verification
+- Build: ✓
+- Tests: ✓ (176 pass)
+- Lint: ✓ (1 pre-existing warning, 0 errors)
+
+### Acceptance Criteria
+- [x] globex switch <id> looks up project in registry
+- [x] Sets active-project if in current repo
+- [x] Prints cd command if project has worktree
+- [x] Prints cd command if project in different repo
+- [x] Errors if project not found
+
+### Files Changed
+- cli/bin/globex.ts

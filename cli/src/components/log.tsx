@@ -82,8 +82,12 @@ function SeparatorEvent(props: { event: ToolEvent }) {
         </>
       ) : null}
       <text fg={colors.fg}>{durationText()}</text>
-      <text fg={colors.fgMuted}>{" · "}</text>
-      <text fg={colors.fg}>{commitText()}</text>
+      {isComplete() ? (
+        <>
+          <text fg={colors.fgMuted}>{" · "}</text>
+          <text fg={colors.fg}>{commitText()}</text>
+        </>
+      ) : null}
       <text fg={colors.fgMuted}>{" ──"}</text>
     </box>
   )

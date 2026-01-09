@@ -77,6 +77,13 @@ function createLoopCallbacks(
       })
     },
     onRalphStart: (iteration) => {
+      const label: ToolEvent = {
+        iteration,
+        type: "tool",
+        icon: "◉",
+        text: "Ralph",
+        timestamp: Date.now(),
+      }
       const spinner: ToolEvent = {
         iteration,
         type: "spinner",
@@ -88,7 +95,7 @@ function createLoopCallbacks(
         execute: {
           ...prev.execute,
           currentAgent: "ralph",
-          events: [...prev.execute.events, spinner],
+          events: [...prev.execute.events, label, spinner],
         },
       }))
     },
@@ -103,6 +110,13 @@ function createLoopCallbacks(
       }))
     },
     onWiggumStart: (iteration) => {
+      const label: ToolEvent = {
+        iteration,
+        type: "tool",
+        icon: "★",
+        text: "Wiggum",
+        timestamp: Date.now(),
+      }
       const spinner: ToolEvent = {
         iteration,
         type: "spinner",
@@ -114,7 +128,7 @@ function createLoopCallbacks(
         execute: {
           ...prev.execute,
           currentAgent: "wiggum",
-          events: [...prev.execute.events, spinner],
+          events: [...prev.execute.events, label, spinner],
         },
       }))
     },

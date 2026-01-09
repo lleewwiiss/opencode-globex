@@ -4,7 +4,7 @@ import { hideBin } from "yargs/helpers"
 import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync } from "fs"
 import { join } from "path"
 import { main } from "../src/index.js"
-import { upsertProject, loadRegistry, type RegistryEntry } from "../src/state/registry.js"
+import { upsertProject, loadRegistry, getProject, type RegistryEntry } from "../src/state/registry.js"
 
 const DEFAULT_MODEL = "anthropic/claude-opus-4-5"
 const GLOBEX_DIR = ".globex"
@@ -101,6 +101,44 @@ await yargs(hideBin(process.argv))
         const phaseCol = entry.phase.padEnd(18)
         
         console.log(`${arrow}  ${idCol} ${phaseCol} ${pathDisplay}`)
+      }
+    }
+  )
+  .command(
+    "switch <project-id>",
+    "Switch to a different globex project",
+    (yargs) =>
+      yargs
+        .positional("project-id", {
+          type: "string",
+          describe: "Project ID to switch to",
+          demandOption: true,
+        }),
+    async (argv) => {
+      const projectId = argv["project-id"] as string
+      const entry = await getProject(projectId)
+      
+      if (!entry) {
+        console.error(`Project '${projectId}' not found in registry.`)
+        process.exit(1)
+      }
+      
+      // Check if project is in current repo
+      if (entry.repoPath === workdir) {
+        // Project in current repo - set active and check for worktree
+        setActiveProject(workdir, projectId)
+        console.log(`Switched to project: ${projectId}`)
+        
+        if (entry.worktreePath) {
+          console.log(`cd ${entry.worktreePath}`)
+        }
+      } else {
+        // Project in different repo
+        if (entry.worktreePath) {
+          console.log(`cd ${entry.worktreePath}`)
+        } else {
+          console.log(`cd ${entry.repoPath}`)
+        }
       }
     }
   )
