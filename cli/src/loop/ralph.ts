@@ -16,11 +16,18 @@ export interface RalphLoopContext {
   workdir: string
   projectId: string
   model: string
+  initialCommitHash: string
+}
+
+export interface IterationResult {
+  duration: number
+  commits: number
+  passed: boolean | null
 }
 
 export interface RalphLoopCallbacks {
   onIterationStart: (iteration: number, featureId: string) => void
-  onIterationComplete: (iteration: number) => void
+  onIterationComplete: (iteration: number, result: IterationResult) => void
   onRalphStart: (featureId: string) => void
   onRalphComplete: (featureId: string) => void
   onWiggumStart: (featureId: string) => void
@@ -206,13 +213,10 @@ export async function runRalphLoop(
   callbacks: RalphLoopCallbacks,
   signal?: AbortSignal
 ): Promise<RalphLoopResult> {
-  const { client, workdir, projectId, model } = ctx
+  const { client, workdir, projectId, model, initialCommitHash } = ctx
   const completedFeatures: string[] = []
   const blockedFeatures: string[] = []
   let iteration = 0
-
-  // Track initial commit hash for counting commits
-  const initialCommitHash = await getHeadHash(workdir)
 
   log("ralph", "runRalphLoop started", { projectId, model, initialCommitHash })
 
@@ -240,6 +244,8 @@ export async function runRalphLoop(
       }
 
       iteration++
+      const iterationStartTime = Date.now()
+      const commitsAtStart = (await getCommitsSince(workdir, initialCommitHash)).length
       log("ralph", "Starting iteration", { iteration, featureId: nextFeature.id })
       callbacks.onIterationStart(iteration, nextFeature.id)
 
@@ -312,6 +318,8 @@ export async function runRalphLoop(
       log("ralph", "Wiggum decision", { featureId: nextFeature.id, approved, rejected })
       callbacks.onWiggumComplete(nextFeature.id, approved)
 
+      let iterationPassed: boolean | null = null
+
       if (approved) {
         // Commit changes and update feature as passed (clear rejection feedback)
         log("ralph", "Feature PASSED", { featureId: nextFeature.id, iteration })
@@ -331,6 +339,7 @@ export async function runRalphLoop(
         await writeFeatures(workdir, projectId, updatedFeatures)
         completedFeatures.push(nextFeature.id)
         callbacks.onFeatureComplete(nextFeature.id)
+        iterationPassed = true
       } else if (rejected) {
         // Increment attempt counter and store rejection feedback in features.json
         const newAttempts = currentAttempts + 1
@@ -345,14 +354,22 @@ export async function runRalphLoop(
 
         await writeFeatures(workdir, projectId, updatedFeatures)
         callbacks.onFeatureRetry(nextFeature.id, newAttempts, reasons.join("; "))
+        iterationPassed = false
       } else {
         callbacks.onError(
           new Error(`Wiggum did not create approval/rejection marker for ${nextFeature.id}`)
         )
       }
 
-      // Iteration complete - remove spinner
-      callbacks.onIterationComplete(iteration)
+      // Iteration complete - calculate stats and notify
+      const iterationDuration = Date.now() - iterationStartTime
+      const commitsAtEnd = (await getCommitsSince(workdir, initialCommitHash)).length
+      const iterationCommits = commitsAtEnd - commitsAtStart
+      callbacks.onIterationComplete(iteration, {
+        duration: iterationDuration,
+        commits: iterationCommits,
+        passed: iterationPassed,
+      })
     }
 
     log("ralph", "Loop aborted")

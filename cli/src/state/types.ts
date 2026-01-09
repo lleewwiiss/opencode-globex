@@ -101,6 +101,7 @@ export type ToolEvent = {
   timestamp: number
   duration?: number
   commitCount?: number
+  passed?: boolean | null
 }
 
 export interface LoopState {

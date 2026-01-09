@@ -113,6 +113,7 @@ function Spinner(props: { isIdle: boolean; currentAgent: "idle" | "ralph" | "wig
 }
 
 function SeparatorEvent(props: { event: ToolEvent }) {
+  const isComplete = createMemo(() => props.event.duration !== undefined)
   const durationText = createMemo(() =>
     props.event.duration !== undefined
       ? formatDuration(props.event.duration)
@@ -122,12 +123,28 @@ function SeparatorEvent(props: { event: ToolEvent }) {
   const commitText = createMemo(() =>
     `${commitCount()} commit${commitCount() !== 1 ? "s" : ""}`
   )
+  const statusText = createMemo(() => {
+    if (props.event.passed === true) return "✓ passed"
+    if (props.event.passed === false) return "✗ failed"
+    return null
+  })
+  const statusColor = createMemo(() => {
+    if (props.event.passed === true) return colors.green
+    if (props.event.passed === false) return colors.red
+    return colors.fg
+  })
 
   return (
     <box width="100%" paddingTop={1} paddingBottom={1} flexDirection="row">
       <text fg={colors.fgMuted}>{"── "}</text>
       <text fg={colors.fg}>iteration {props.event.iteration}</text>
       <text fg={colors.fgMuted}>{" ────────────── "}</text>
+      {isComplete() && statusText() ? (
+        <>
+          <text fg={statusColor()}>{statusText()}</text>
+          <text fg={colors.fgMuted}>{" · "}</text>
+        </>
+      ) : null}
       <text fg={colors.fg}>{durationText()}</text>
       <text fg={colors.fgMuted}>{" · "}</text>
       <text fg={colors.fg}>{commitText()}</text>

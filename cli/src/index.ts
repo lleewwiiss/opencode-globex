@@ -6,7 +6,8 @@ import { loadState, checkStateExists, createState, saveState, sanitizeProjectId,
 import * as fs from "node:fs/promises"
 import { readFeatures, readFeaturesWithSummary } from "./state/features-persistence.js"
 import { loadConfig } from "./config.js"
-import { runRalphLoop, type RalphLoopCallbacks } from "./loop/ralph.js"
+import { runRalphLoop, type RalphLoopCallbacks, type IterationResult } from "./loop/ralph.js"
+import { getHeadHash, getCommitsSince, getDiffStatsSince } from "./git.js"
 import { createSignal, removeSignal } from "./loop/signals.js"
 import { runResearchPhase } from "./phases/research.js"
 import { runResearchInterviewPhase } from "./phases/research-interview.js"
@@ -56,11 +57,21 @@ function createLoopCallbacks(
         },
       }))
     },
-    onIterationComplete: (iteration) => {
+    onIterationComplete: (iteration, result: IterationResult) => {
       setState((prev) => {
-        const events = prev.execute.events.filter(
-          (e) => !(e.type === "spinner" && e.iteration === iteration)
-        )
+        const events = prev.execute.events
+          .filter((e) => !(e.type === "spinner" && e.iteration === iteration))
+          .map((e) => {
+            if (e.type === "separator" && e.iteration === iteration) {
+              return {
+                ...e,
+                duration: result.duration,
+                commitCount: result.commits,
+                passed: result.passed,
+              }
+            }
+            return e
+          })
         return {
           ...prev,
           execute: {
@@ -198,6 +209,7 @@ interface PhaseContext {
   setState: Setter<AppState>
   signal: AbortSignal
   client: ReturnType<typeof createOpencodeClient>
+  initialCommitHash: string
 }
 
 const runExecutePhase: PhaseRunner = async (ctx) => {
@@ -209,6 +221,7 @@ const runExecutePhase: PhaseRunner = async (ctx) => {
       workdir: ctx.workdir,
       projectId: ctx.projectId,
       model: ctx.model,
+      initialCommitHash: ctx.initialCommitHash,
     },
     callbacks,
     ctx.signal
@@ -493,10 +506,28 @@ async function transitionToExecute(
   model: string,
   signal: AbortSignal
 ): Promise<void> {
-  const state = await loadState(workdir, projectId)
+  let state = await loadState(workdir, projectId)
   const phase = state.currentPhase
   const features = await readFeatures(workdir, projectId)
   const progress = getProgressStats(features)
+
+  // Get or create initial commit hash for tracking cumulative stats
+  let initialCommitHash = state.initialCommitHash
+  if (!initialCommitHash) {
+    initialCommitHash = await getHeadHash(workdir)
+    state = { ...state, initialCommitHash }
+    await saveState(workdir, projectId, state)
+    log("index", "Saved initial commit hash", { projectId, initialCommitHash })
+  }
+
+  // Load cumulative git stats from initial commit
+  const commits = await getCommitsSince(workdir, initialCommitHash)
+  const diffStats = await getDiffStatsSince(workdir, initialCommitHash)
+  log("index", "Loaded git stats on resume", {
+    commits: commits.length,
+    linesAdded: diffStats.added,
+    linesRemoved: diffStats.removed,
+  })
 
   setState((prev) => ({
     ...prev,
@@ -508,6 +539,9 @@ async function transitionToExecute(
       featuresComplete: progress.completed,
       totalFeatures: progress.total,
       startedAt: Date.now(),
+      commits: commits.length,
+      linesAdded: diffStats.added,
+      linesRemoved: diffStats.removed,
     },
   }))
 
@@ -518,6 +552,7 @@ async function transitionToExecute(
     setState,
     signal,
     client,
+    initialCommitHash,
   }
 
   const runner = PHASE_RUNNERS[phase] ?? runWaitingPhase

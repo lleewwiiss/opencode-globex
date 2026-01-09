@@ -1,5 +1,31 @@
 # Progress
 
+## Feature: state-workspace-schema
+
+### Status: complete
+
+### Changes Made
+- **cli/src/state/schema.ts:190-202**: Added `WorkspaceTypeSchema` (Union of Literal) and `WorkspaceInfoSchema` (Struct with optional fields)
+- **cli/tests/loop/ralph.test.ts**: Added `initialCommitHash: "test-initial-hash"` to all 9 `RalphLoopContext` instances to fix build errors from prior uncommitted RalphLoopContext changes
+
+### Implementation
+- `WorkspaceTypeSchema`: `Schema.Union(Schema.Literal("current"), Schema.Literal("worktree"))`
+- `WorkspaceInfoSchema`: Struct with `type`, `worktreePath?`, `branchName?`, `createdAt?`
+- Followed existing patterns from lines 3-8 and 10-18
+
+### Verification
+- Build: ✓
+- Tests: ✓ (158 pass in cli/tests/)
+- Lint: ✓ (4 warnings, 0 errors)
+
+### Acceptance Criteria
+- [x] WorkspaceTypeSchema validates 'current' | 'worktree'
+- [x] WorkspaceInfoSchema validates WorkspaceInfo shape with optional fields
+- [x] Schemas export correctly
+- [x] Build passes
+
+---
+
 ## Feature: git-worktree-tests
 
 ### Status: complete

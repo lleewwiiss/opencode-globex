@@ -143,6 +143,7 @@ describe("cli/loop/ralph", () => {
         workdir: testDir,
         projectId,
         model: "anthropic/claude-sonnet-4",
+        initialCommitHash: "test-initial-hash",
       }
 
       const result = await runRalphLoop(ctx, callbacks)
@@ -185,6 +186,7 @@ describe("cli/loop/ralph", () => {
         workdir: testDir,
         projectId,
         model: "anthropic/claude-sonnet-4",
+        initialCommitHash: "test-initial-hash",
       }
 
       const result = await runRalphLoop(ctx, callbacks)
@@ -245,6 +247,7 @@ describe("cli/loop/ralph", () => {
         workdir: testDir,
         projectId,
         model: "anthropic/claude-sonnet-4",
+        initialCommitHash: "test-initial-hash",
       }
 
       await runRalphLoop(ctx, callbacks, abortController.signal)
@@ -276,6 +279,7 @@ describe("cli/loop/ralph", () => {
         workdir: testDir,
         projectId,
         model: "anthropic/claude-sonnet-4",
+        initialCommitHash: "test-initial-hash",
       }
 
       const result = await runRalphLoop(ctx, callbacks)
@@ -325,6 +329,7 @@ describe("cli/loop/ralph", () => {
         workdir: testDir,
         projectId,
         model: "anthropic/claude-sonnet-4",
+        initialCommitHash: "test-initial-hash",
       }
 
       await runRalphLoop(ctx, callbacks, abortController.signal)
@@ -350,6 +355,7 @@ describe("cli/loop/ralph", () => {
         workdir: testDir,
         projectId,
         model: "anthropic/claude-sonnet-4",
+        initialCommitHash: "test-initial-hash",
       }
 
       // Remove pause file after onPaused
@@ -411,6 +417,7 @@ describe("cli/loop/ralph", () => {
         workdir: testDir,
         projectId,
         model: "anthropic/claude-sonnet-4",
+        initialCommitHash: "test-initial-hash",
       }
 
       // Abort during session
@@ -470,6 +477,7 @@ describe("cli/loop/ralph", () => {
         workdir: testDir,
         projectId,
         model: "anthropic/claude-sonnet-4",
+        initialCommitHash: "test-initial-hash",
       }
 
       await runRalphLoop(ctx, callbacks, abortController.signal)
@@ -507,6 +515,7 @@ describe("cli/loop/ralph", () => {
         workdir: testDir,
         projectId,
         model: "anthropic/claude-sonnet-4",
+        initialCommitHash: "test-initial-hash",
       }
 
       await runRalphLoop(ctx, callbacks, abortController.signal)

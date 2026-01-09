@@ -187,6 +187,20 @@ export const InterviewAnswersPayloadSchema = Schema.Struct({
 })
 export type InterviewAnswersPayload = Schema.Schema.Type<typeof InterviewAnswersPayloadSchema>
 
+export const WorkspaceTypeSchema = Schema.Union(
+  Schema.Literal("current"),
+  Schema.Literal("worktree")
+)
+export type WorkspaceType = Schema.Schema.Type<typeof WorkspaceTypeSchema>
+
+export const WorkspaceInfoSchema = Schema.Struct({
+  type: WorkspaceTypeSchema,
+  worktreePath: Schema.optional(Schema.String),
+  branchName: Schema.optional(Schema.String),
+  createdAt: Schema.optional(Schema.String),
+})
+export type WorkspaceInfo = Schema.Schema.Type<typeof WorkspaceInfoSchema>
+
 export function decodeInterviewRound(raw: string): InterviewRound {
   const parsed = JSON.parse(raw)
   return Schema.decodeUnknownSync(InterviewRoundSchema)(parsed)

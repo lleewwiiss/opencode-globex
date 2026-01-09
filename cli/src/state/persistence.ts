@@ -142,7 +142,7 @@ export const saveState = async (workdir: string, projectId: string, state: Globe
 export const checkStateExists = async (workdir: string, projectId: string): Promise<boolean> =>
   Effect.runPromise(stateExists(workdir, projectId))
 
-export const createState = (projectName: string, description: string, phase: Phase = "init"): GlobexState => ({
+export const createState = (projectName: string, description: string, phase: Phase = "init", initialCommitHash?: string): GlobexState => ({
   currentPhase: phase,
   projectName,
   description,
@@ -151,6 +151,7 @@ export const createState = (projectName: string, description: string, phase: Pha
   approvals: {},
   artifacts: {},
   interviewHistory: {},
+  initialCommitHash,
 })
 
 export const sanitizeProjectId = (name: string): string =>
