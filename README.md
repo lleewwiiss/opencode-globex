@@ -39,6 +39,7 @@ Named after Hank Scorpio's company. The "Ralph loop" is named after Ralph Wiggum
 
 - **Standalone CLI** — Run `globex` from any project directory
 - **TUI interface** — Real-time progress display with OpenTUI
+- **@ file references** — Autocomplete to attach files to your project description
 - **OpenCode SDK integration** — Spawns sessions for each agent
 - **Phase-based workflow** — Research, plan, features, execute
 - **Coach/player pattern** — Ralph implements, Wiggum validates
@@ -203,6 +204,24 @@ bun run lint     # oxlint cli/src/
 bun run build    # tsc
 bun test         # all tests
 ```
+
+---
+
+## Acknowledgements
+
+Globex stands on the shoulders of giants. Massive thanks to:
+
+### [OpenCode](https://github.com/anomalyco/opencode)
+
+OpenCode is an exceptional open-source AI coding agent that powers Globex's agent sessions. The codebase is beautifully architected—clean TypeScript with Bun, Zod for validation, and an elegant TUI built with OpenTUI and SolidJS. The @ file reference autocomplete in Globex is directly inspired by (and learned from) OpenCode's prompt component implementation. If you're building AI-powered developer tools, OpenCode is the gold standard to study.
+
+### [opencode-ralph](https://github.com/Hona/opencode-ralph)
+
+Luke Parker's `@hona/ralph-cli` is the definitive implementation of Ralph-driven development. It's a beautifully minimal CLI that reads a plan, picks one task, completes it, commits, and repeats—with fresh context every iteration. Globex's execution loop is directly inspired by opencode-ralph's architecture. The TUI patterns, state persistence, and OpenCode SDK integration we use all trace back to studying this codebase. If you want pure Ralph-driven development without the PRD workflow, use opencode-ralph directly.
+
+### [Geoffrey Huntley's Ralph Driven Development](https://ghuntley.com/ralph/)
+
+The conceptual foundation. Geoffrey's insight that agents succeed through determined retry (like Ralph Wiggum stumbling into success) is the philosophy behind everything here. Fresh context every iteration eliminates drift. Deterministic failures become debuggable. AGENTS.md accumulates wisdom. This is the way.
 
 ---
 

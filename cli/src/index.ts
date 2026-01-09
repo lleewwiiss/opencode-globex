@@ -241,6 +241,7 @@ async function transitionToResearch(
   projectId: string,
   projectName: string,
   description: string,
+  refs: FileReference[],
   model: string,
   variant: string,
   signal: AbortSignal
@@ -264,6 +265,7 @@ async function transitionToResearch(
       projectId,
       projectName,
       description,
+      refs,
       model,
       variant,
       signal,
@@ -659,7 +661,7 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
       } else if (existingState.currentPhase === "research") {
         const { submitAnswer } = await transitionToResearch(
           client, setState, workdir, activeProjectId, existingState.projectName, 
-          existingState.description, model, DEFAULT_VARIANT, signal
+          existingState.description, [], model, DEFAULT_VARIANT, signal
         )
         interviewSubmitAnswer = submitAnswer
         currentPhase = "research_interview"
@@ -707,7 +709,7 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
       currentProjectName = projectName
       currentPhase = "research_interview"
 
-      const { submitAnswer } = await transitionToResearch(client, setState, workdir, newProjectId, projectName, action.description, model, DEFAULT_VARIANT, signal)
+      const { submitAnswer } = await transitionToResearch(client, setState, workdir, newProjectId, projectName, action.description, action.refs, model, DEFAULT_VARIANT, signal)
       interviewSubmitAnswer = submitAnswer
     }
 
