@@ -693,7 +693,12 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
     }
 
     const callbacks: AppCallbacks = {
-      onQuit: () => abortController.abort(),
+      onQuit: async () => {
+        log("index", "Quit requested, cleaning up...")
+        await cleanup()
+        server?.close()
+        process.exit(0)
+      },
       onContinue: (id) => {
         if (resolveAction) resolveAction({ type: "continue", projectId: id })
       },
