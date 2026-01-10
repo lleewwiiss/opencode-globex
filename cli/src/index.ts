@@ -744,10 +744,13 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
       const exists = await checkStateExists(workdir, projectId)
       if (exists) {
         const existingState = await loadState(workdir, projectId)
-        initialState.init.activeProject = {
-          id: projectId,
-          name: existingState.projectName,
-          phase: existingState.currentPhase,
+        // Don't offer to continue completed projects
+        if (existingState.currentPhase !== "complete") {
+          initialState.init.activeProject = {
+            id: projectId,
+            name: existingState.projectName,
+            phase: existingState.currentPhase,
+          }
         }
       }
     }
@@ -981,9 +984,19 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
         }
       } else if (existingState.currentPhase === "execute") {
         await transitionToExecute(client, setState, workdir, activeProjectId, model, signal)
+      } else if (existingState.currentPhase === "complete") {
+        // Complete projects should not be continued - clear and return to init
+        log("index", "Cannot continue completed project", { projectId: activeProjectId })
+        await clearActiveProject(workdir)
+        return
       } else {
-        // init or complete - show execute screen as fallback
-        await transitionToExecute(client, setState, workdir, activeProjectId, model, signal)
+        // init phase - restart from research
+        const { submitAnswer } = await transitionToResearch(
+          client, setState, workdir, activeProjectId, existingState.projectName,
+          existingState.description, [], model, DEFAULT_VARIANT, signal
+        )
+        interviewSubmitAnswer = submitAnswer
+        currentPhase = "research_interview"
       }
     } else {
       const projectName = action.description.slice(0, 50)
