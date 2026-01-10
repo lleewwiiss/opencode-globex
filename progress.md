@@ -25,70 +25,47 @@ Inside `updatePhase` after writing state:
 - [x] Build passes
 
 ### Files Changed
-- cli/src/state/persistence.ts
+- cli/bin/globex.ts
 
 ---
 
-## Feature: ralph-split-workdir
+## Feature: globe-view-component
 
 ### Status: complete
 
 ### Changes Made
-- **cli/src/loop/ralph.ts:24-30**: Changed `RalphLoopContext` interface from `workdir: string` to `artifactWorkdir: string` + `codeWorkdir: string`
-- **cli/src/loop/ralph.ts:263**: Updated destructuring at start of `runRalphLoop`
-- **cli/src/loop/ralph.ts:268,282**: `readFeatures` calls now use `artifactWorkdir`
-- **cli/src/loop/ralph.ts:317,412,428**: `writeFeatures` calls now use `artifactWorkdir`
-- **cli/src/loop/ralph.ts:419**: `readRejectionInfo` call now uses `codeWorkdir` (was artifact-related but kept for rejection marker location)
-- **cli/src/loop/ralph.ts:277,299,329,357,388,389,399,402,403,439**: git/signal calls now use `codeWorkdir`
-- **cli/src/index.ts:280-281**: Updated caller to pass both `artifactWorkdir: ctx.workdir` and `codeWorkdir: ctx.workdir`
-- **cli/tests/loop/ralph.test.ts**: Updated all 9 RalphLoopContext instances to use new schema
-
-### Verification
-- Build: ✓
-- Tests: ✓ (9 pass in ralph.test.ts)
-- Lint: ✓ (2 pre-existing warnings, 0 errors)
-
-### Acceptance Criteria
-- [x] RalphLoopContext has artifactWorkdir and codeWorkdir instead of single workdir
-- [x] readFeatures/writeFeatures use artifactWorkdir
-- [x] commitChanges/getHeadHash/getCommitsSince use codeWorkdir
-- [x] checkSignal/clearSignals/checkPaused use codeWorkdir
-- [x] Build passes
-
-### Files Changed
-- cli/src/loop/ralph.ts
-- cli/src/index.ts
-- cli/tests/loop/ralph.test.ts
-
----
-
-## Feature: cli-default-command-update
-
-### Status: complete
-
-### Changes Made
-- **cli/bin/globex.ts:66-68**: Updated usage string to show available subcommands
-- **cli/bin/globex.ts:354-365**: Added registry integration when creating projects via --description
-- **cli/bin/globex.ts:377-381**: Enhanced error message to show subcommand options
+- **cli/src/components/globe-view.tsx**: Created new file with GlobeView component
 
 ### Implementation
-1. When `--description` creates a new project, now calls `upsertProject()` to register in `~/.globex/registry.json`
-2. Updated usage string in yargs to list all subcommands
-3. Enhanced "no project" error message to show available subcommands
-4. Backwards compatible - existing --description flag behavior preserved
+Extracted from init.tsx:36-58 and init.tsx:104-112:
+
+1. `ColorSpan` interface for batched color segments
+2. `batchByColor(cells)` - batches consecutive same-color GlobeCells into ColorSpans
+3. `GlobeLine` component - renders row of colored text spans using For/createMemo
+4. `GlobeViewProps` interface: width, height, frameCount? (default 48), animationInterval? (default 80ms)
+5. `GlobeView` component - manages frame generation and animation loop with onCleanup
+
+Animation pattern follows init.tsx:120-128:
+- `createEffect` regenerates frames when dimensions change
+- `createEffect` with `setInterval` runs animation at configurable interval
+- `onCleanup(() => clearInterval(interval))` for proper cleanup
 
 ### Verification
 - Build: ✓
-- Tests: ✓ (176 pass)
+- Tests: ✓ (176 CLI tests pass)
 - Lint: ✓ (2 pre-existing warnings, 0 errors)
 
 ### Acceptance Criteria
-- [x] Default command registers new projects in registry
-- [x] Backwards compatible - still works with --description flag
-- [x] Updates usage string to show subcommands
+- [x] New file cli/src/components/globe-view.tsx exists
+- [x] GlobeView component exported with props: width, height, frameCount?, animationInterval?
+- [x] batchByColor function correctly batches consecutive same-color cells
+- [x] GlobeLine component renders row of colored text spans
+- [x] Animation loop runs at configurable interval (default 80ms)
+- [x] Component cleans up interval on unmount via onCleanup
 
 ### Files Changed
-- cli/bin/globex.ts
+- cli/src/components/globe-view.tsx (new file)
+
 
 ---
 

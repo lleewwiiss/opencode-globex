@@ -92,9 +92,12 @@ async function waitWhilePaused(
   }
 }
 
-function buildRalphPrompt(feature: Feature, feedback?: string): string {
+function buildRalphPrompt(feature: Feature, codeWorkdir: string, feedback?: string): string {
   let prompt = RALPH_PROMPT
-  prompt += `\n\n## Current Feature\n`
+  prompt += `\n\n## Working Directory\n`
+  prompt += `All signal files (.globex-done, .globex-approved, .globex-rejected) MUST be created in:\n`
+  prompt += `\`${codeWorkdir}\`\n`
+  prompt += `\n## Current Feature\n`
   prompt += `ID: ${feature.id}\n`
   prompt += `Description: ${feature.description}\n`
 
@@ -127,9 +130,12 @@ function buildRalphPrompt(feature: Feature, feedback?: string): string {
   return prompt
 }
 
-function buildWiggumPrompt(feature: Feature): string {
+function buildWiggumPrompt(feature: Feature, codeWorkdir: string): string {
   let prompt = WIGGUM_PROMPT
-  prompt += `\n\n## Current Feature to Validate\n`
+  prompt += `\n\n## Working Directory\n`
+  prompt += `All signal files (.globex-approved, .globex-rejected) MUST be created in:\n`
+  prompt += `\`${codeWorkdir}\`\n`
+  prompt += `\n## Current Feature to Validate\n`
   prompt += `ID: ${feature.id}\n`
   prompt += `Description: ${feature.description}\n`
 
@@ -331,7 +337,7 @@ export async function runRalphLoop(
       // Run Ralph
       log("ralph", "Starting Ralph", { featureId: nextFeature.id })
       callbacks.onRalphStart(iteration, nextFeature.id)
-      const ralphPrompt = buildRalphPrompt(nextFeature, feedback)
+      const ralphPrompt = buildRalphPrompt(nextFeature, codeWorkdir, feedback)
 
       const ralphSuccess = await runAgentWithEvents(
         client,
@@ -364,7 +370,7 @@ export async function runRalphLoop(
       // Run Wiggum
       log("ralph", "Starting Wiggum", { featureId: nextFeature.id })
       callbacks.onWiggumStart(iteration, nextFeature.id)
-      const wiggumPrompt = buildWiggumPrompt(nextFeature)
+      const wiggumPrompt = buildWiggumPrompt(nextFeature, codeWorkdir)
 
       const wiggumSuccess = await runAgentWithEvents(
         client,

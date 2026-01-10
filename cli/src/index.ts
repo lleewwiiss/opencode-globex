@@ -299,7 +299,8 @@ function createLoopCallbacks(
 type PhaseRunner = (ctx: PhaseContext) => Promise<void>
 
 interface PhaseContext {
-  workdir: string
+  artifactWorkdir: string
+  codeWorkdir: string
   projectId: string
   model: string
   setState: Setter<AppState>
@@ -309,13 +310,13 @@ interface PhaseContext {
 }
 
 const runExecutePhase: PhaseRunner = async (ctx) => {
-  const callbacks = createLoopCallbacks(ctx.setState, ctx.workdir, ctx.projectId)
+  const callbacks = createLoopCallbacks(ctx.setState, ctx.artifactWorkdir, ctx.projectId)
 
   await runRalphLoop(
     {
       client: ctx.client,
-      artifactWorkdir: ctx.workdir,
-      codeWorkdir: ctx.workdir,
+      artifactWorkdir: ctx.artifactWorkdir,
+      codeWorkdir: ctx.codeWorkdir,
       projectId: ctx.projectId,
       model: ctx.model,
       initialCommitHash: ctx.initialCommitHash,
@@ -496,32 +497,12 @@ async function transitionToPlan(
     setState
   )
 
-  // Show review screen for plan.md before interview
-  // The actual interview will start when user confirms the review
-  const artifactContent = await readArtifactContent(workdir, projectId, "plan.md")
-  
-  // Save reviewPending so we resume at review if quit
-  const state = await loadState(workdir, projectId)
-  await saveState(workdir, projectId, { ...state, reviewPending: true })
-  
-  setState((prev) => ({
-    ...prev,
-    screen: "review",
-    review: {
-      phase: "plan",
-      projectName,
-      projectId,
-      artifactName: "plan.md",
-      artifactContent,
-      chatHistory: [],
-      isWaitingForAgent: false,
-      startedAt: Date.now(),
-    },
-  }))
-
-  // Return a dummy submitAnswer - the actual interview will be started 
-  // when handleReviewConfirm is called for plan phase
-  return { submitAnswer: async () => false }
+  // After plan phase, go directly to plan_interview (matching research flow)
+  // The interview will transition to review when complete
+  return await runPlanInterviewPhase(
+    { client, workdir, projectId, projectName, model, signal },
+    setState
+  )
 }
 
 async function transitionToFeatures(
@@ -615,82 +596,34 @@ async function transitionToConfirm(
 }
 
 async function transitionToExecute(
-  client: ReturnType<typeof createOpencodeClient>,
+  serverUrl: string,
   setState: Setter<AppState>,
   workdir: string,
   projectId: string,
   model: string,
-  signal: AbortSignal,
-  useWorktree = false
+  signal: AbortSignal
 ): Promise<void> {
-  let state = await loadState(workdir, projectId)
+  const state = await loadState(workdir, projectId)
   const phase = state.currentPhase
   const features = await readFeatures(workdir, projectId)
   const progress = getProgressStats(features)
 
-  // Determine the effective working directory (worktree or current)
-  let codeWorkdir = workdir
-
-  // Handle worktree creation if requested and not already set up
-  if (useWorktree && !state.workspace?.worktreePath) {
-    const worktreePath = getWorktreePath(projectId)
-    const branchName = getWorktreeBranch(projectId)
-
-    try {
-      // Create the worktree
-      await createWorktree(workdir, worktreePath, branchName)
-      log("index", "Created worktree for execution", { projectId, worktreePath, branchName })
-
-      // Update state with workspace info
-      state = {
-        ...state,
-        workspace: {
-          type: "worktree",
-          worktreePath,
-          branchName,
-          createdAt: new Date().toISOString(),
-        },
-      }
-      await saveState(workdir, projectId, state)
-
-      // Update registry with worktree info
-      const existingEntry = await getProject(projectId)
-      if (existingEntry) {
-        await upsertProject(projectId, {
-          ...existingEntry,
-          worktreePath,
-          branchName,
-        })
-      }
-
-      codeWorkdir = worktreePath
-    } catch (err) {
-      // Fallback to current directory on failure
-      log("index", "Failed to create worktree, falling back to current dir", {
-        projectId,
-        error: String(err),
-      })
-      // Update state to mark workspace as current
-      state = {
-        ...state,
-        workspace: {
-          type: "current",
-        },
-      }
-      await saveState(workdir, projectId, state)
-    }
-  } else if (state.workspace?.worktreePath) {
-    // Resume existing worktree
-    codeWorkdir = state.workspace.worktreePath
-    log("index", "Resuming with existing worktree", { projectId, worktreePath: codeWorkdir })
+  // Determine the effective working directory for code operations
+  // Artifacts are in workdir, code runs in codeWorkdir (may be worktree)
+  const codeWorkdir = state.workspace?.worktreePath ?? workdir
+  if (state.workspace?.worktreePath) {
+    log("index", "Using worktree for execution", { projectId, worktreePath: codeWorkdir })
   }
+
+  // Create client with worktree directory so OpenCode agents run in the right place
+  const client = createOpencodeClient({ baseUrl: serverUrl, directory: codeWorkdir })
+  log("index", "Created OpenCode client with directory", { directory: codeWorkdir })
 
   // Get or create initial commit hash for tracking cumulative stats
   let initialCommitHash = state.initialCommitHash
   if (!initialCommitHash) {
     initialCommitHash = await getHeadHash(codeWorkdir)
-    state = { ...state, initialCommitHash }
-    await saveState(workdir, projectId, state)
+    await saveState(workdir, projectId, { ...state, initialCommitHash })
     log("index", "Saved initial commit hash", { projectId, initialCommitHash })
   }
 
@@ -720,7 +653,8 @@ async function transitionToExecute(
   }))
 
   const ctx: PhaseContext = {
-    workdir: codeWorkdir,
+    artifactWorkdir: workdir,
+    codeWorkdir,
     projectId,
     model,
     setState,
@@ -789,7 +723,7 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
 
     type InitAction = 
       | { type: "continue"; projectId: string }
-      | { type: "new"; description: string; refs: FileReference[] }
+      | { type: "new"; description: string; refs: FileReference[]; useWorktree: boolean }
     let resolveAction: ((action: InitAction) => void) | null = null
     const actionPromise = new Promise<InitAction>((resolve) => {
       resolveAction = resolve
@@ -802,6 +736,7 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
     let currentProjectId: string | null = null
     let currentProjectName: string | null = null
     let currentPhase: Phase | null = null
+    let currentWorkdir: string = workdir
 
     // Transition to review screen after interview completes
     const transitionToReview = async (completedPhase: Phase) => {
@@ -810,11 +745,11 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
       const artifactName = completedPhase === "research_interview" ? "research.md" 
         : (completedPhase === "plan" || completedPhase === "plan_interview") ? "plan.md" 
         : "research.md"
-      const artifactContent = await readArtifactContent(workdir, currentProjectId, artifactName)
+      const artifactContent = await readArtifactContent(currentWorkdir, currentProjectId, artifactName)
       
       // Save reviewPending to state so we can resume at review screen
-      const state = await loadState(workdir, currentProjectId)
-      await saveState(workdir, currentProjectId, { ...state, reviewPending: true })
+      const state = await loadState(currentWorkdir, currentProjectId)
+      await saveState(currentWorkdir, currentProjectId, { ...state, reviewPending: true })
       
       setState((prev) => ({
         ...prev,
@@ -837,28 +772,21 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
       if (!currentProjectId || !currentProjectName || !currentPhase) return
       
       // Clear reviewPending flag
-      const state = await loadState(workdir, currentProjectId)
-      await saveState(workdir, currentProjectId, { ...state, reviewPending: false })
+      const state = await loadState(currentWorkdir, currentProjectId)
+      await saveState(currentWorkdir, currentProjectId, { ...state, reviewPending: false })
       
       if (currentPhase === "research_interview") {
-        // research_interview → plan (background) → plan review
-        await transitionToPlan(
-          client, setState, workdir, currentProjectId, currentProjectName,
+        // research_interview review confirmed → plan phase (which includes plan_interview)
+        const { submitAnswer } = await transitionToPlan(
+          client, setState, currentWorkdir, currentProjectId, currentProjectName,
           model, DEFAULT_VARIANT, signal
-        )
-        currentPhase = "plan"
-      } else if (currentPhase === "plan") {
-        // plan review confirmed → plan_interview
-        const { submitAnswer } = await runPlanInterviewPhase(
-          { client, workdir, projectId: currentProjectId, projectName: currentProjectName, model, signal },
-          setState
         )
         interviewSubmitAnswer = submitAnswer
         currentPhase = "plan_interview"
       } else if (currentPhase === "plan_interview") {
-        // plan_interview → features → confirm
+        // plan_interview review confirmed → features → confirm
         await transitionToFeatures(
-          client, setState, workdir, currentProjectId, currentProjectName,
+          client, setState, currentWorkdir, currentProjectId, currentProjectName,
           model, DEFAULT_VARIANT, signal
         )
         currentPhase = "features"
@@ -897,7 +825,7 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
       setTimeout(async () => {
         // Re-read the artifact in case it was updated
         const artifactContent = currentArtifactName 
-          ? await readArtifactContent(workdir, currentProjectId!, currentArtifactName)
+          ? await readArtifactContent(currentWorkdir, currentProjectId!, currentArtifactName)
           : ""
         
         setState((prev) => ({
@@ -924,8 +852,8 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
       onContinue: (id) => {
         if (resolveAction) resolveAction({ type: "continue", projectId: id })
       },
-      onNewProject: (description, refs) => {
-        if (resolveAction) resolveAction({ type: "new", description, refs })
+      onNewProject: (description, refs, useWorktree) => {
+        if (resolveAction) resolveAction({ type: "new", description, refs, useWorktree })
       },
       onInterviewAnswer: async (payload) => {
         if (interviewSubmitAnswer) {
@@ -941,9 +869,9 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
       onReviewFeedback: async (feedback) => {
         await handleReviewFeedback(feedback)
       },
-      onConfirmExecute: async (useWorktree) => {
+      onConfirmExecute: async () => {
         if (currentProjectId) {
-          await transitionToExecute(client, setState, workdir, currentProjectId, model, signal, useWorktree)
+          await transitionToExecute(server!.url, setState, workdir, currentProjectId, model, signal)
           currentPhase = "execute"
         }
       },
@@ -974,10 +902,17 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
       const activeProjectId = action.projectId
       const existingState = await loadState(workdir, activeProjectId)
       
+      // Determine effective workdir - use worktree if configured
+      const effectiveWorkdir = existingState.workspace?.worktreePath ?? workdir
+      if (existingState.workspace?.worktreePath) {
+        log("index", "Resuming project in worktree", { activeProjectId, worktreePath: effectiveWorkdir })
+      }
+      
       // Set current project context for phase transitions
       currentProjectId = activeProjectId
       currentProjectName = existingState.projectName
       currentPhase = existingState.currentPhase
+      currentWorkdir = effectiveWorkdir
       
       // Route based on current phase
       if (existingState.currentPhase === "research_interview") {
@@ -986,64 +921,61 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
           await transitionToReview("research_interview")
         } else {
           const { submitAnswer } = await runResearchInterviewPhase(
-            { client, workdir, projectId: activeProjectId, projectName: existingState.projectName, model, signal },
+            { client, workdir: effectiveWorkdir, projectId: activeProjectId, projectName: existingState.projectName, model, signal },
             setState
           )
           interviewSubmitAnswer = submitAnswer
         }
       } else if (existingState.currentPhase === "research") {
         const { submitAnswer } = await transitionToResearch(
-          client, setState, workdir, activeProjectId, existingState.projectName, 
+          client, setState, effectiveWorkdir, activeProjectId, existingState.projectName, 
           existingState.description, [], model, DEFAULT_VARIANT, signal
         )
         interviewSubmitAnswer = submitAnswer
         currentPhase = "research_interview"
       } else if (existingState.currentPhase === "plan") {
-        if (existingState.reviewPending) {
-          // Plan was generated, show review screen for plan.md
-          await transitionToReview("plan")
-        } else {
-          // Run plan background phase
-          await transitionToPlan(
-            client, setState, workdir, activeProjectId, existingState.projectName,
-            model, DEFAULT_VARIANT, signal
-          )
-        }
+        // Run plan background phase → plan_interview
+        const { submitAnswer } = await transitionToPlan(
+          client, setState, effectiveWorkdir, activeProjectId, existingState.projectName,
+          model, DEFAULT_VARIANT, signal
+        )
+        interviewSubmitAnswer = submitAnswer
+        currentPhase = "plan_interview"
       } else if (existingState.currentPhase === "plan_interview") {
         if (existingState.reviewPending) {
           // Interview was completed, show review screen
           await transitionToReview("plan_interview")
         } else {
           const { submitAnswer } = await runPlanInterviewPhase(
-            { client, workdir, projectId: activeProjectId, projectName: existingState.projectName, model, signal },
+            { client, workdir: effectiveWorkdir, projectId: activeProjectId, projectName: existingState.projectName, model, signal },
             setState
           )
           interviewSubmitAnswer = submitAnswer
         }
       } else if (existingState.currentPhase === "features") {
         // Features already generated, check if features.json exists
-        const features = await readFeatures(workdir, activeProjectId)
+        const features = await readFeatures(effectiveWorkdir, activeProjectId)
         if (features.length > 0) {
           // Show confirm screen
-          await transitionToConfirm(setState, workdir, activeProjectId, existingState.projectName)
+          await transitionToConfirm(setState, effectiveWorkdir, activeProjectId, existingState.projectName)
         } else {
           // Need to generate features
           await transitionToFeatures(
-            client, setState, workdir, activeProjectId, existingState.projectName,
+            client, setState, effectiveWorkdir, activeProjectId, existingState.projectName,
             model, DEFAULT_VARIANT, signal
           )
         }
       } else if (existingState.currentPhase === "execute") {
-        await transitionToExecute(client, setState, workdir, activeProjectId, model, signal)
+        await transitionToExecute(server.url, setState, effectiveWorkdir, activeProjectId, model, signal)
       } else if (existingState.currentPhase === "complete") {
         // Complete projects should not be continued - clear and return to init
         log("index", "Cannot continue completed project", { projectId: activeProjectId })
-        await clearActiveProject(workdir)
+        await clearActiveProject(effectiveWorkdir)
         return
       } else {
         // init phase - restart from research
         const { submitAnswer } = await transitionToResearch(
-          client, setState, workdir, activeProjectId, existingState.projectName,
+          client, setState, effectiveWorkdir, activeProjectId, existingState.projectName,
           existingState.description, [], model, DEFAULT_VARIANT, signal
         )
         interviewSubmitAnswer = submitAnswer
@@ -1052,16 +984,59 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
     } else {
       const projectName = action.description.slice(0, 50)
       const newProjectId = sanitizeProjectId(projectName)
+      
+      // Determine effective workdir based on worktree choice
+      let effectiveWorkdir = workdir
+      if (action.useWorktree) {
+        const worktreePath = getWorktreePath(newProjectId)
+        const branchName = getWorktreeBranch(newProjectId)
+        
+        try {
+          await createWorktree(workdir, worktreePath, branchName)
+          log("index", "Created worktree for new project", { newProjectId, worktreePath, branchName })
+          effectiveWorkdir = worktreePath
+          
+          // Update registry with worktree info
+          await upsertProject(newProjectId, {
+            name: projectName,
+            repoPath: workdir,
+            phase: "research",
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            worktreePath,
+            branchName,
+          })
+        } catch (err) {
+          log("index", "Failed to create worktree, falling back to current dir", {
+            newProjectId,
+            error: String(err),
+          })
+        }
+      }
+      
       const newState = createState(projectName, action.description)
-      await saveState(workdir, newProjectId, newState)
-      await setActiveProject(workdir, newProjectId)
+      // Store workspace info in state
+      if (action.useWorktree && effectiveWorkdir !== workdir) {
+        newState.workspace = {
+          type: "worktree",
+          worktreePath: effectiveWorkdir,
+          branchName: getWorktreeBranch(newProjectId),
+          createdAt: new Date().toISOString(),
+        }
+      } else {
+        newState.workspace = { type: "current" }
+      }
+      
+      await saveState(effectiveWorkdir, newProjectId, newState)
+      await setActiveProject(effectiveWorkdir, newProjectId)
 
       // Set current project context for phase transitions
       currentProjectId = newProjectId
       currentProjectName = projectName
       currentPhase = "research_interview"
+      currentWorkdir = effectiveWorkdir
 
-      const { submitAnswer } = await transitionToResearch(client, setState, workdir, newProjectId, projectName, action.description, action.refs, model, DEFAULT_VARIANT, signal)
+      const { submitAnswer } = await transitionToResearch(client, setState, effectiveWorkdir, newProjectId, projectName, action.description, action.refs, model, DEFAULT_VARIANT, signal)
       interviewSubmitAnswer = submitAnswer
     }
 

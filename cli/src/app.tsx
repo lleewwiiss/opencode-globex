@@ -89,11 +89,11 @@ export interface AppState {
 export interface AppCallbacks {
   onQuit: () => void
   onContinue: (projectId: string) => void
-  onNewProject: (description: string, refs: FileReference[]) => void
+  onNewProject: (description: string, refs: FileReference[], useWorktree: boolean) => void
   onInterviewAnswer?: (payload: InterviewAnswersPayload) => void
   onReviewConfirm?: () => void
   onReviewFeedback?: (feedback: string) => void
-  onConfirmExecute?: (useWorktree: boolean) => void
+  onConfirmExecute?: () => void
   onKeyboardEvent?: () => void
   onPauseToggle?: (paused: boolean) => void
 }
@@ -355,7 +355,7 @@ export function App(props: AppProps) {
           totalFeatures={state().confirm.totalFeatures}
           featureCategories={state().confirm.featureCategories}
           summary={state().confirm.summary}
-          onConfirm={(useWorktree) => props.callbacks.onConfirmExecute?.(useWorktree)}
+          onConfirm={() => props.callbacks.onConfirmExecute?.()}
           onQuit={handleQuit}
         />
       </Match>

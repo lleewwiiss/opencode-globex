@@ -20,11 +20,12 @@ export interface InitScreenProps {
   activeProject?: ActiveProject
   workdir: string
   onContinue: (projectId: string) => void
-  onNewProject: (description: string, refs: FileReference[]) => void
+  onNewProject: (description: string, refs: FileReference[], useWorktree: boolean) => void
   onQuit: () => void
 }
 
-type InitStep = "select" | "input"
+type InitStep = "select" | "workspace" | "input"
+type WorkspaceChoice = "current" | "worktree"
 
 import { generateGlobeFrames, computeGlobeDimensions, type GlobeCell } from "../globe.js"
 
@@ -65,10 +66,25 @@ const MENU_HEIGHT = 10
 
 export function InitScreen(props: InitScreenProps) {
   const hasActiveProject = createMemo(() => !!props.activeProject)
-  const [step, setStep] = createSignal<InitStep>(hasActiveProject() ? "select" : "input")
+  const [step, setStep] = createSignal<InitStep>(hasActiveProject() ? "select" : "workspace")
   const [selectedIndex, setSelectedIndex] = createSignal(0)
+  const [workspaceChoice, setWorkspaceChoice] = createSignal<WorkspaceChoice>("current")
+  const [workspaceIndex, setWorkspaceIndex] = createSignal(0)
   
   const [inputRef, setInputRef] = createSignal<TextInputWithRefsRef | undefined>()
+  
+  const workspaceOptions = [
+    { 
+      label: "Work in current directory", 
+      description: "Make changes directly in this workspace",
+      value: "current" as WorkspaceChoice
+    },
+    { 
+      label: "Create new branch + worktree", 
+      description: "Isolated workspace at ~/.globex/workspaces/",
+      value: "worktree" as WorkspaceChoice
+    },
+  ]
   
   const [globeFrame, setGlobeFrame] = createSignal(0)
   const [globeFrames, setGlobeFrames] = createSignal<GlobeCell[][][]>([])
@@ -138,10 +154,17 @@ export function InitScreen(props: InitScreenProps) {
         { key: "q", label: "quit" },
       ]
     }
+    if (step() === "workspace") {
+      return [
+        { key: "↑↓", label: "navigate" },
+        { key: "enter", label: "select" },
+        { key: "esc", label: hasActiveProject() ? "back" : "quit" },
+      ]
+    }
     return [
       { key: "@", label: "add file" },
       { key: "enter", label: "submit" },
-      { key: "esc", label: hasActiveProject() ? "back" : "quit" },
+      { key: "esc", label: "back" },
     ]
   })
 
@@ -168,7 +191,22 @@ export function InitScreen(props: InitScreenProps) {
         if (selected?.value === "continue" && props.activeProject) {
           props.onContinue(props.activeProject.id)
         } else if (selected?.value === "new") {
-          setStep("input")
+          setStep("workspace")
+        }
+      }
+    } else if (step() === "workspace") {
+      if (keyName === "up" || keyName === "k") {
+        setWorkspaceIndex((i) => Math.max(0, i - 1))
+      } else if (keyName === "down" || keyName === "j") {
+        setWorkspaceIndex((i) => Math.min(workspaceOptions.length - 1, i + 1))
+      } else if (keyName === "return" || keyName === "enter") {
+        setWorkspaceChoice(workspaceOptions[workspaceIndex()]!.value)
+        setStep("input")
+      } else if (keyName === "escape") {
+        if (hasActiveProject()) {
+          setStep("select")
+        } else {
+          props.onQuit()
         }
       }
     } else if (step() === "input") {
@@ -177,11 +215,7 @@ export function InitScreen(props: InitScreenProps) {
         if (inputRef()?.isAutocompleteVisible()) {
           return
         }
-        if (hasActiveProject()) {
-          setStep("select")
-        } else {
-          props.onQuit()
-        }
+        setStep("workspace")
       }
     }
   })
@@ -189,7 +223,7 @@ export function InitScreen(props: InitScreenProps) {
   const handleInputSubmit = (text: string, refs: FileReference[]) => {
     const trimmed = text.trim()
     if (trimmed.length > 0) {
-      props.onNewProject(trimmed, refs)
+      props.onNewProject(trimmed, refs, workspaceChoice() === "worktree")
     }
   }
 
@@ -252,10 +286,45 @@ export function InitScreen(props: InitScreenProps) {
                   if (selected?.value === "continue" && props.activeProject) {
                     props.onContinue(props.activeProject.id)
                   } else if (selected?.value === "new") {
-                    setStep("input")
+                    setStep("workspace")
                   }
                 }}
               />
+            </box>
+          </Show>
+
+          {/* Workspace Step */}
+          <Show when={step() === "workspace"}>
+            <box flexDirection="column" width={50} marginTop={isCompact() ? 0 : 1}>
+              <text fg={colors.fgMuted} marginBottom={1}>
+                Where should Globex make changes?
+              </text>
+
+              <For each={workspaceOptions}>
+                {(option, index) => (
+                  <box 
+                    flexDirection="column" 
+                    marginBottom={1}
+                    paddingLeft={1}
+                    paddingRight={1}
+                    border={workspaceIndex() === index()}
+                    borderStyle="rounded"
+                    borderColor={workspaceIndex() === index() ? colors.cyan : colors.border}
+                  >
+                    <box flexDirection="row" gap={1}>
+                      <text fg={workspaceIndex() === index() ? colors.cyan : colors.fg}>
+                        {workspaceIndex() === index() ? "●" : "○"}
+                      </text>
+                      <text fg={workspaceIndex() === index() ? colors.cyan : colors.fg}>
+                        {option.label}
+                      </text>
+                    </box>
+                    <text fg={colors.fgDark} marginLeft={2}>
+                      {option.description}
+                    </text>
+                  </box>
+                )}
+              </For>
             </box>
           </Show>
 
