@@ -1,14 +1,19 @@
 /** @jsxImportSource @opentui/solid */
-import { createSignal, createMemo, createEffect, onCleanup, For } from "solid-js"
-import { useKeyboard, useRenderer } from "@opentui/solid"
+import { createSignal, createMemo, createEffect, onCleanup, For, Show } from "solid-js"
+import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import type { Setter } from "solid-js"
 import { colors } from "../colors.js"
+import { GlobeView } from "../globe-view.js"
+import { MIN_GLOBE_WIDTH, MIN_GLOBE_HEIGHT } from "../globe.js"
 import { SimpleHeader } from "../simple-header.js"
 import { SimpleFooter, type KeyHint } from "../simple-footer.js"
 import type { Phase } from "../../state/types.js"
 import type { AppState, BackgroundState } from "../../app.js"
 
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+
+const MINI_GLOBE_WIDTH = 24
+const MINI_GLOBE_HEIGHT = 12
 
 const PHASE_STATUS_TEXT: Record<Phase, string> = {
   init: "Initializing...",
@@ -38,11 +43,17 @@ export function BackgroundScreen(props: BackgroundScreenProps) {
   const renderer = useRenderer()
   const [spinnerFrame, setSpinnerFrame] = createSignal(0)
   const [elapsed, setElapsed] = createSignal(0)
+  const terminalDimensions = useTerminalDimensions()
 
   const phase = createMemo(() => props.state.phase)
   const projectName = createMemo(() => props.state.projectName)
   const statusMessages = createMemo(() => props.state.statusMessages)
   const startedAt = createMemo(() => props.state.startedAt)
+
+  const showMiniGlobe = createMemo(() => {
+    const dims = terminalDimensions()
+    return dims.height >= MINI_GLOBE_HEIGHT + 12 && dims.width >= MINI_GLOBE_WIDTH + 4
+  })
 
   createEffect(() => {
     const interval = setInterval(() => {
@@ -110,6 +121,11 @@ export function BackgroundScreen(props: BackgroundScreenProps) {
         paddingLeft={2}
         paddingRight={2}
       >
+        <Show when={showMiniGlobe()}>
+          <box marginBottom={1}>
+            <GlobeView width={MINI_GLOBE_WIDTH} height={MINI_GLOBE_HEIGHT} />
+          </box>
+        </Show>
         <box flexDirection="row" alignItems="center" marginBottom={2}>
           <text fg={colors.cyan}>{spinner()}</text>
           <text fg={colors.fg}>{" "}{statusText()}</text>

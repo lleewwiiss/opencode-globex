@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-import { createSignal, createMemo, createEffect, onCleanup, Show, For } from "solid-js"
+import { createSignal, createMemo, Show } from "solid-js"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import type { SelectOption } from "@opentui/core"
 import { colors } from "../colors.js"
@@ -8,6 +8,8 @@ import { SimpleFooter, type KeyHint } from "../simple-footer.js"
 import { TextInputWithRefs, type TextInputWithRefsRef } from "../text-input-with-refs.js"
 import { AutocompleteOverlay } from "../autocomplete-overlay.js"
 import type { FileReference } from "../../state/schema.js"
+import { GlobeView } from "../globe-view.js"
+import { computeGlobeDimensions } from "../globe.js"
 
 export interface ActiveProject {
   id: string
@@ -26,37 +28,6 @@ export interface InitScreenProps {
 
 type InitStep = "select" | "workspace" | "input"
 type WorkspaceChoice = "current" | "worktree"
-
-import { generateGlobeFrames, computeGlobeDimensions, type GlobeCell } from "../globe.js"
-
-interface ColorSpan {
-  color: string
-  text: string
-}
-
-function batchByColor(cells: GlobeCell[]): ColorSpan[] {
-  const spans: ColorSpan[] = []
-  for (const cell of cells) {
-    const last = spans[spans.length - 1]
-    if (last && last.color === cell.color) {
-      last.text += cell.char
-    } else {
-      spans.push({ color: cell.color, text: cell.char })
-    }
-  }
-  return spans
-}
-
-function GlobeLine(props: { cells: GlobeCell[] }) {
-  const spans = createMemo(() => batchByColor(props.cells))
-  return (
-    <box flexDirection="row">
-      <For each={spans()}>
-        {(span) => <text fg={span.color}>{span.text}</text>}
-      </For>
-    </box>
-  )
-}
 
 // Reserved space: header ~2, footer ~2, title ~2, margins ~2
 const RESERVED_VERTICAL = 8
@@ -85,9 +56,6 @@ export function InitScreen(props: InitScreenProps) {
       value: "worktree" as WorkspaceChoice
     },
   ]
-  
-  const [globeFrame, setGlobeFrame] = createSignal(0)
-  const [globeFrames, setGlobeFrames] = createSignal<GlobeCell[][][]>([])
   const terminalDimensions = useTerminalDimensions()
 
   // Compute globe dimensions and layout mode based on terminal size
@@ -105,26 +73,6 @@ export function InitScreen(props: InitScreenProps) {
     if (!globeDims) return true // No globe = definitely compact
     const neededHeight = RESERVED_VERTICAL + globeDims.height + MENU_HEIGHT
     return dims.height < neededHeight
-  })
-
-  // Regenerate globe frames when dimensions change
-  createEffect(() => {
-    const dims = globeDimensions()
-    if (dims) {
-      setGlobeFrames(generateGlobeFrames(48, dims.width, dims.height))
-    } else {
-      setGlobeFrames([])
-    }
-  })
-
-  // Animation loop for globe rotation (80ms per frame for smooth spin)
-  createEffect(() => {
-    const frames = globeFrames()
-    if (frames.length === 0) return
-    const interval = setInterval(() => {
-      setGlobeFrame((f) => (f + 1) % frames.length)
-    }, 80)
-    onCleanup(() => clearInterval(interval))
   })
 
   const selectOptions = createMemo((): SelectOption[] => {
@@ -246,19 +194,15 @@ export function InitScreen(props: InitScreenProps) {
         gap={isCompact() ? 4 : 0}
       >
         {/* Animated Globe Logo */}
-        <Show when={globeFrames().length > 0}>
+        <Show when={globeDimensions()}>
           <box flexDirection="column" alignItems="center" marginBottom={isCompact() ? 0 : 1}>
-            <box flexDirection="column">
-              <For each={globeFrames()[globeFrame()] ?? []}>
-                {(row) => <GlobeLine cells={row} />}
-              </For>
-            </box>
+            <GlobeView width={globeDimensions()!.width} height={globeDimensions()!.height} />
             <text fg={colors.fg}>GLOBEX CORPORATION</text>
             <text fg={colors.fgDark}>Wiggum driven development; No vibes allowed.</text>
           </box>
         </Show>
         {/* Fallback when globe is too small */}
-        <Show when={globeFrames().length === 0}>
+        <Show when={!globeDimensions()}>
           <box flexDirection="column" alignItems="center" marginBottom={isCompact() ? 0 : 1}>
             <text fg={colors.green}>GLOBEX</text>
             <text fg={colors.fg}>CORPORATION</text>
