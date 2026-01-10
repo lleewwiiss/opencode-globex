@@ -13,6 +13,7 @@ export interface ActiveProject {
   id: string
   name: string
   phase: string
+  worktreePath?: string
 }
 
 export interface InitScreenProps {
@@ -112,10 +113,13 @@ export function InitScreen(props: InitScreenProps) {
 
   const selectOptions = createMemo((): SelectOption[] => {
     if (!props.activeProject) return []
+    const continueDesc = props.activeProject.worktreePath
+      ? `${props.activeProject.phase} · ${props.activeProject.worktreePath}`
+      : `Resume at ${props.activeProject.phase} phase`
     return [
       {
         name: `Continue "${props.activeProject.name}"`,
-        description: `Resume at ${props.activeProject.phase} phase`,
+        description: continueDesc,
         value: "continue",
       },
       {

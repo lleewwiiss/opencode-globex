@@ -746,10 +746,13 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
         const existingState = await loadState(workdir, projectId)
         // Don't offer to continue completed projects
         if (existingState.currentPhase !== "complete") {
+          // Get registry entry for worktree path
+          const registryEntry = await getProject(projectId)
           initialState.init.activeProject = {
             id: projectId,
             name: existingState.projectName,
             phase: existingState.currentPhase,
+            worktreePath: registryEntry?.worktreePath,
           }
         }
       }
