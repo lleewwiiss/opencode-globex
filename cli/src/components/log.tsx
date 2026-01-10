@@ -50,8 +50,19 @@ function SpinnerInline(props: { frame: number; currentAgent: "idle" | "ralph" | 
   )
 }
 
+function CompletionEvent(props: { event: ToolEvent }) {
+  return (
+    <box width="100%" paddingTop={2} paddingBottom={1} flexDirection="column" alignItems="center">
+      <text fg={colors.green}>{"✓ All features complete"}</text>
+      <text fg={colors.fgMuted}>{props.event.text}</text>
+    </box>
+  )
+}
+
 function SeparatorEvent(props: { event: ToolEvent }) {
-  const isComplete = () => props.event.duration !== undefined
+  // Check if this is a completion event (iteration 0 with "complete:" text)
+  const isCompletion = () => props.event.iteration === 0 && props.event.text?.startsWith("complete:")
+  
   const durationText = () =>
     props.event.duration !== undefined
       ? formatDuration(props.event.duration)
@@ -68,6 +79,11 @@ function SeparatorEvent(props: { event: ToolEvent }) {
     if (props.event.passed === true) return colors.green
     if (props.event.passed === false) return colors.red
     return colors.fg
+  }
+
+  // Render completion banner for final event
+  if (isCompletion()) {
+    return <CompletionEvent event={props.event} />
   }
 
   return (
