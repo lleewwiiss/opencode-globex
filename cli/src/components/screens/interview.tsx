@@ -351,27 +351,31 @@ export function InterviewScreen(props: InterviewScreenProps) {
         </Show>
 
         <Show when={!isWaitingForAgent() && !hasStructuredQuestions()}>
-          <box
+          <scrollbox
             flexDirection="column"
             flexGrow={1}
+            flexShrink={1}
             border={true}
             borderStyle="rounded"
             borderColor={colors.border}
             backgroundColor={colors.bg}
             padding={1}
+
           >
             <Show when={agentMessage()}>
               <MarkdownQuestionView markdown={agentMessage()} />
             </Show>
-          </box>
+          </scrollbox>
 
-          <TextInput
-            multiline={true}
-            height={8}
-            placeholder="Type your answer... (Enter to submit, Shift+Enter for new line)"
-            borderColor={colors.cyan}
-            onSubmit={handleLegacySubmit}
-          />
+          <box flexShrink={0} marginTop={1}>
+            <TextInput
+              multiline={true}
+              height={8}
+              placeholder="Type your answer... (Enter to submit, Shift+Enter for new line)"
+              borderColor={colors.cyan}
+              onSubmit={handleLegacySubmit}
+            />
+          </box>
         </Show>
 
       </box>

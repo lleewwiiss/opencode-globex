@@ -93,7 +93,7 @@ export interface AppCallbacks {
   onInterviewAnswer?: (payload: InterviewAnswersPayload) => void
   onReviewConfirm?: () => void
   onReviewFeedback?: (feedback: string) => void
-  onConfirmExecute?: () => void
+  onConfirmExecute?: (useWorktree: boolean) => void
   onKeyboardEvent?: () => void
   onPauseToggle?: (paused: boolean) => void
 }
@@ -355,7 +355,7 @@ export function App(props: AppProps) {
           totalFeatures={state().confirm.totalFeatures}
           featureCategories={state().confirm.featureCategories}
           summary={state().confirm.summary}
-          onConfirm={() => props.callbacks.onConfirmExecute?.()}
+          onConfirm={(useWorktree) => props.callbacks.onConfirmExecute?.(useWorktree)}
           onQuit={handleQuit}
         />
       </Match>

@@ -1,12 +1,13 @@
 /** @jsxImportSource @opentui/solid */
 import { createSignal, createEffect, onCleanup, Show, For } from "solid-js"
-import { useKeyboard, useRenderer } from "@opentui/solid"
+import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
+import type { ScrollBoxRenderable, ScrollAcceleration } from "@opentui/core"
 import type { Setter } from "solid-js"
 import { colors } from "../colors.js"
 import { SimpleHeader } from "../simple-header.js"
 import { SimpleFooter, type KeyHint } from "../simple-footer.js"
 import { TextInput } from "../text-input.js"
-import { MarkdownQuestionView } from "../markdown-view.js"
+import { MarkdownRenderer } from "../markdown-renderer.js"
 import type { AppState, ReviewState } from "../../app.js"
 import { log } from "../../util/log.js"
 
@@ -25,6 +26,16 @@ interface ChatMessage {
 
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
+class FixedSpeedScroll implements ScrollAcceleration {
+  constructor(private speed: number) {}
+  tick(_now?: number): number {
+    return this.speed
+  }
+  reset(): void {}
+}
+
+const scrollAccel = new FixedSpeedScroll(3)
+
 function formatElapsed(ms: number): string {
   const totalSeconds = Math.floor(ms / 1000)
   const minutes = Math.floor(totalSeconds / 60)
@@ -38,9 +49,12 @@ export function ReviewScreen(props: ReviewScreenProps) {
   log("review-screen", "ReviewScreen mounting")
 
   const renderer = useRenderer()
+  const dimensions = useTerminalDimensions()
 
   const [elapsed, setElapsed] = createSignal(0)
   const [spinnerFrame, setSpinnerFrame] = createSignal(0)
+  
+  let scrollRef: ScrollBoxRenderable | undefined
 
   const phase = () => currentState().phase
   const projectName = () => currentState().projectName
@@ -83,6 +97,23 @@ export function ReviewScreen(props: ReviewScreenProps) {
     } else if (keyName === "y" && !isWaitingForAgent()) {
       props.onConfirm()
     }
+    
+    if (scrollRef) {
+      const pageSize = Math.floor(dimensions().height * 0.5)
+      if (keyName === "up" || keyName === "k") {
+        scrollRef.scrollBy(-3)
+      } else if (keyName === "down" || keyName === "j") {
+        scrollRef.scrollBy(3)
+      } else if (keyName === "pageup") {
+        scrollRef.scrollBy(-pageSize)
+      } else if (keyName === "pagedown" || keyName === "space") {
+        scrollRef.scrollBy(pageSize)
+      } else if (keyName === "home" || keyName === "g") {
+        scrollRef.scrollTo(0)
+      } else if (keyName === "end") {
+        scrollRef.scrollTo(scrollRef.scrollHeight)
+      }
+    }
   })
 
   const handleFeedbackSubmit = (text: string) => {
@@ -97,6 +128,7 @@ export function ReviewScreen(props: ReviewScreenProps) {
     }
     return [
       { key: "y", label: "confirm & proceed" },
+      { key: "j/k", label: "scroll" },
       { key: "enter", label: "submit feedback" },
       { key: "esc", label: "quit" },
     ]
@@ -140,31 +172,30 @@ export function ReviewScreen(props: ReviewScreenProps) {
         </text>
 
         <scrollbox
+          ref={(r: ScrollBoxRenderable) => (scrollRef = r)}
           flexGrow={1}
-          stickyScroll={false}
-          rootOptions={{
-            backgroundColor: colors.bg,
-            border: true,
-            borderStyle: "rounded",
-            borderColor: colors.border,
-          }}
+          flexShrink={1}
+          border={true}
+          borderStyle="rounded"
+          borderColor={colors.border}
+          backgroundColor={colors.bg}
+          scrollAcceleration={scrollAccel}
           viewportOptions={{
-            backgroundColor: colors.bg,
             padding: 1,
+            backgroundColor: colors.bg,
           }}
           verticalScrollbarOptions={{
             visible: true,
-            trackOptions: {
-              backgroundColor: colors.border,
-            },
+            paddingLeft: 1,
           }}
         >
-          <MarkdownQuestionView markdown={artifactContent()} />
+          <MarkdownRenderer content={artifactContent()} />
         </scrollbox>
 
         <Show when={chatHistory().length > 0}>
           <box
             flexDirection="column"
+            flexShrink={0}
             marginTop={1}
             border={true}
             borderStyle="rounded"
@@ -193,7 +224,7 @@ export function ReviewScreen(props: ReviewScreenProps) {
           </box>
         </Show>
 
-        <box marginTop={1}>
+        <box marginTop={1} flexShrink={0}>
           <Show when={isWaitingForAgent()}>
             <box
               border={true}

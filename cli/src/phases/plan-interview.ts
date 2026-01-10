@@ -2,9 +2,8 @@ import type { OpencodeClient } from "@opencode-ai/sdk/v2/client"
 import type { Setter } from "solid-js"
 import { abortSession } from "../opencode/session.js"
 import { PLAN_INTERVIEW_PROMPT } from "../agents/prompts.js"
-import { updatePhase, getProjectDir } from "../state/persistence.js"
+import { getProjectDir } from "../state/persistence.js"
 import type { AppState } from "../app.js"
-import { Effect } from "effect"
 import { log } from "../util/log.js"
 import { 
   runInterviewSession, 
@@ -108,7 +107,7 @@ export async function runPlanInterviewPhase(
         log("plan-interview", "Session cleanup failed", { error: String(e) })
       )
     }
-    await Effect.runPromise(updatePhase(workdir, projectId, "features"))
+    // Don't transition phase here - let the review screen handle it after user approves
     return { 
       submitAnswer: async () => true,
       getCurrentRound: () => null,
@@ -173,7 +172,7 @@ export async function runPlanInterviewPhase(
           log("plan-interview", "Session cleanup failed", { error: String(e) })
         )
       }
-      await Effect.runPromise(updatePhase(workdir, projectId, "features"))
+      // Don't transition phase here - let the review screen handle it after user approves
       return true
     }
 

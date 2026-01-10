@@ -26,6 +26,16 @@ import { Effect } from "effect"
 const DEFAULT_MODEL = "anthropic/claude-opus-4-5"
 const DEFAULT_VARIANT = "max"
 
+async function readArtifactContent(workdir: string, projectId: string, artifactName: string): Promise<string> {
+  const projectDir = getProjectDir(workdir, projectId)
+  const artifactPath = `${projectDir}/${artifactName}`
+  try {
+    return await fs.readFile(artifactPath, "utf-8")
+  } catch {
+    return `[Could not load ${artifactName}]`
+  }
+}
+
 /**
  * Returns the worktree path for a project at ~/.globex/workspaces/<projectId>/
  */
@@ -486,13 +496,32 @@ async function transitionToPlan(
     setState
   )
 
-  // Chain to plan interview phase
-  const { submitAnswer } = await runPlanInterviewPhase(
-    { client, workdir, projectId, projectName, model, signal },
-    setState
-  )
+  // Show review screen for plan.md before interview
+  // The actual interview will start when user confirms the review
+  const artifactContent = await readArtifactContent(workdir, projectId, "plan.md")
+  
+  // Save reviewPending so we resume at review if quit
+  const state = await loadState(workdir, projectId)
+  await saveState(workdir, projectId, { ...state, reviewPending: true })
+  
+  setState((prev) => ({
+    ...prev,
+    screen: "review",
+    review: {
+      phase: "plan",
+      projectName,
+      projectId,
+      artifactName: "plan.md",
+      artifactContent,
+      chatHistory: [],
+      isWaitingForAgent: false,
+      startedAt: Date.now(),
+    },
+  }))
 
-  return { submitAnswer }
+  // Return a dummy submitAnswer - the actual interview will be started 
+  // when handleReviewConfirm is called for plan phase
+  return { submitAnswer: async () => false }
 }
 
 async function transitionToFeatures(
@@ -774,23 +803,18 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
     let currentProjectName: string | null = null
     let currentPhase: Phase | null = null
 
-    // Helper to read artifact content
-    const readArtifact = async (projectId: string, artifactName: string): Promise<string> => {
-      const projectDir = getProjectDir(workdir, projectId)
-      const artifactPath = `${projectDir}/${artifactName}`
-      try {
-        return await fs.readFile(artifactPath, "utf-8")
-      } catch {
-        return `[Could not load ${artifactName}]`
-      }
-    }
-
     // Transition to review screen after interview completes
     const transitionToReview = async (completedPhase: Phase) => {
       if (!currentProjectId || !currentProjectName) return
       
-      const artifactName = completedPhase === "research_interview" ? "research.md" : "plan.md"
-      const artifactContent = await readArtifact(currentProjectId, artifactName)
+      const artifactName = completedPhase === "research_interview" ? "research.md" 
+        : (completedPhase === "plan" || completedPhase === "plan_interview") ? "plan.md" 
+        : "research.md"
+      const artifactContent = await readArtifactContent(workdir, currentProjectId, artifactName)
+      
+      // Save reviewPending to state so we can resume at review screen
+      const state = await loadState(workdir, currentProjectId)
+      await saveState(workdir, currentProjectId, { ...state, reviewPending: true })
       
       setState((prev) => ({
         ...prev,
@@ -812,11 +836,22 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
     const handleReviewConfirm = async () => {
       if (!currentProjectId || !currentProjectName || !currentPhase) return
       
+      // Clear reviewPending flag
+      const state = await loadState(workdir, currentProjectId)
+      await saveState(workdir, currentProjectId, { ...state, reviewPending: false })
+      
       if (currentPhase === "research_interview") {
-        // research_interview → plan → plan_interview
-        const { submitAnswer } = await transitionToPlan(
+        // research_interview → plan (background) → plan review
+        await transitionToPlan(
           client, setState, workdir, currentProjectId, currentProjectName,
           model, DEFAULT_VARIANT, signal
+        )
+        currentPhase = "plan"
+      } else if (currentPhase === "plan") {
+        // plan review confirmed → plan_interview
+        const { submitAnswer } = await runPlanInterviewPhase(
+          { client, workdir, projectId: currentProjectId, projectName: currentProjectName, model, signal },
+          setState
         )
         interviewSubmitAnswer = submitAnswer
         currentPhase = "plan_interview"
@@ -862,7 +897,7 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
       setTimeout(async () => {
         // Re-read the artifact in case it was updated
         const artifactContent = currentArtifactName 
-          ? await readArtifact(currentProjectId!, currentArtifactName)
+          ? await readArtifactContent(workdir, currentProjectId!, currentArtifactName)
           : ""
         
         setState((prev) => ({
@@ -881,11 +916,10 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
     }
 
     const callbacks: AppCallbacks = {
-      onQuit: async () => {
-        log("index", "Quit requested, cleaning up...")
-        await cleanup()
-        server?.close()
-        process.exit(0)
+      onQuit: () => {
+        log("index", "Quit requested")
+        // Don't call process.exit here - let the exitPromise resolve
+        // and the finally block handle cleanup gracefully
       },
       onContinue: (id) => {
         if (resolveAction) resolveAction({ type: "continue", projectId: id })
@@ -907,9 +941,9 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
       onReviewFeedback: async (feedback) => {
         await handleReviewFeedback(feedback)
       },
-      onConfirmExecute: async () => {
+      onConfirmExecute: async (useWorktree) => {
         if (currentProjectId) {
-          await transitionToExecute(client, setState, workdir, currentProjectId, model, signal)
+          await transitionToExecute(client, setState, workdir, currentProjectId, model, signal, useWorktree)
           currentPhase = "execute"
         }
       },
@@ -947,11 +981,16 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
       
       // Route based on current phase
       if (existingState.currentPhase === "research_interview") {
-        const { submitAnswer } = await runResearchInterviewPhase(
-          { client, workdir, projectId: activeProjectId, projectName: existingState.projectName, model, signal },
-          setState
-        )
-        interviewSubmitAnswer = submitAnswer
+        if (existingState.reviewPending) {
+          // Interview was completed, show review screen
+          await transitionToReview("research_interview")
+        } else {
+          const { submitAnswer } = await runResearchInterviewPhase(
+            { client, workdir, projectId: activeProjectId, projectName: existingState.projectName, model, signal },
+            setState
+          )
+          interviewSubmitAnswer = submitAnswer
+        }
       } else if (existingState.currentPhase === "research") {
         const { submitAnswer } = await transitionToResearch(
           client, setState, workdir, activeProjectId, existingState.projectName, 
@@ -960,18 +999,27 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
         interviewSubmitAnswer = submitAnswer
         currentPhase = "research_interview"
       } else if (existingState.currentPhase === "plan") {
-        const { submitAnswer } = await transitionToPlan(
-          client, setState, workdir, activeProjectId, existingState.projectName,
-          model, DEFAULT_VARIANT, signal
-        )
-        interviewSubmitAnswer = submitAnswer
-        currentPhase = "plan_interview"
+        if (existingState.reviewPending) {
+          // Plan was generated, show review screen for plan.md
+          await transitionToReview("plan")
+        } else {
+          // Run plan background phase
+          await transitionToPlan(
+            client, setState, workdir, activeProjectId, existingState.projectName,
+            model, DEFAULT_VARIANT, signal
+          )
+        }
       } else if (existingState.currentPhase === "plan_interview") {
-        const { submitAnswer } = await runPlanInterviewPhase(
-          { client, workdir, projectId: activeProjectId, projectName: existingState.projectName, model, signal },
-          setState
-        )
-        interviewSubmitAnswer = submitAnswer
+        if (existingState.reviewPending) {
+          // Interview was completed, show review screen
+          await transitionToReview("plan_interview")
+        } else {
+          const { submitAnswer } = await runPlanInterviewPhase(
+            { client, workdir, projectId: activeProjectId, projectName: existingState.projectName, model, signal },
+            setState
+          )
+          interviewSubmitAnswer = submitAnswer
+        }
       } else if (existingState.currentPhase === "features") {
         // Features already generated, check if features.json exists
         const features = await readFeatures(workdir, activeProjectId)

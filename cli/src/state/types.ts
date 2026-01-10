@@ -45,6 +45,7 @@ export interface GlobexState {
   interviewHistory: Partial<Record<"research" | "plan" | "features", InterviewHistory>>
   workspace?: WorkspaceInfo
   initialCommitHash?: string
+  reviewPending?: boolean
 }
 
 export type TUIStatus = "idle" | "running" | "paused" | "waiting_approval" | "error"

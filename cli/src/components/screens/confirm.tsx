@@ -10,18 +10,38 @@ export interface ConfirmScreenProps {
   totalFeatures: number
   featureCategories: { category: string; count: number }[]
   summary: string
-  onConfirm: () => void
+  onConfirm: (useWorktree: boolean) => void
   onQuit: () => void
 }
 
+type WorkspaceChoice = "current" | "worktree"
+
 export function ConfirmScreen(props: ConfirmScreenProps) {
   const renderer = useRenderer()
+  const [workspaceChoice, setWorkspaceChoice] = createSignal<WorkspaceChoice>("current")
   const [selectedIndex, setSelectedIndex] = createSignal(0)
 
-  const options = [
+  const workspaceOptions: { label: string; description: string; value: WorkspaceChoice }[] = [
+    { 
+      label: "Work in current directory", 
+      description: "Make changes directly in this workspace",
+      value: "current" 
+    },
+    { 
+      label: "Create new branch + worktree", 
+      description: "Isolated workspace at ~/.globex/workspaces/",
+      value: "worktree" 
+    },
+  ]
+
+  const actionOptions = [
     { label: "Start execution loop", value: "confirm" },
     { label: "Cancel and quit", value: "cancel" },
   ]
+
+  const totalOptions = workspaceOptions.length + actionOptions.length
+  const isInWorkspaceSection = () => selectedIndex() < workspaceOptions.length
+  const actionIndex = () => selectedIndex() - workspaceOptions.length
 
   useKeyboard((key: { name: string; ctrl?: boolean }) => {
     const keyName = key.name.toLowerCase()
@@ -29,15 +49,19 @@ export function ConfirmScreen(props: ConfirmScreenProps) {
     if (keyName === "up" || keyName === "k") {
       setSelectedIndex((i) => Math.max(0, i - 1))
     } else if (keyName === "down" || keyName === "j") {
-      setSelectedIndex((i) => Math.min(options.length - 1, i + 1))
+      setSelectedIndex((i) => Math.min(totalOptions - 1, i + 1))
     } else if (keyName === "return" || keyName === "enter") {
-      const selected = options[selectedIndex()]
-      if (selected?.value === "confirm") {
-        props.onConfirm()
+      if (isInWorkspaceSection()) {
+        setWorkspaceChoice(workspaceOptions[selectedIndex()]!.value)
       } else {
-        renderer.setTerminalTitle("")
-        renderer.destroy()
-        props.onQuit()
+        const selected = actionOptions[actionIndex()]
+        if (selected?.value === "confirm") {
+          props.onConfirm(workspaceChoice() === "worktree")
+        } else {
+          renderer.setTerminalTitle("")
+          renderer.destroy()
+          props.onQuit()
+        }
       }
     } else if (keyName === "q" && !key.ctrl) {
       renderer.setTerminalTitle("")
@@ -121,24 +145,62 @@ export function ConfirmScreen(props: ConfirmScreenProps) {
 
         <box height={2} />
 
-        {/* Selection options */}
+        {/* Workspace choice section */}
+        <box flexDirection="column" width={60}>
+          <text fg={colors.fgMuted}>Workspace:</text>
+          <box height={1} />
+          <For each={workspaceOptions}>
+            {(option, index) => {
+              const isSelected = () => selectedIndex() === index()
+              const isChosen = () => workspaceChoice() === option.value
+              return (
+                <box
+                  flexDirection="column"
+                  paddingLeft={2}
+                  paddingRight={2}
+                  paddingTop={1}
+                  paddingBottom={1}
+                  backgroundColor={isSelected() ? colors.bgHighlight : colors.bg}
+                >
+                  <box flexDirection="row">
+                    <text fg={isChosen() ? colors.green : colors.fgMuted}>
+                      {isChosen() ? "◉ " : "○ "}
+                    </text>
+                    <text fg={isSelected() ? colors.cyan : colors.fg}>
+                      {option.label}
+                    </text>
+                  </box>
+                  <text fg={colors.fgDark} paddingLeft={2}>{option.description}</text>
+                </box>
+              )
+            }}
+          </For>
+        </box>
+
+        <box height={2} />
+
+        {/* Action options */}
         <box flexDirection="column" width={40}>
-          <For each={options}>
-            {(option, index) => (
-              <box
-                flexDirection="row"
-                paddingLeft={2}
-                paddingRight={2}
-                paddingTop={1}
-                paddingBottom={1}
-                backgroundColor={selectedIndex() === index() ? colors.bgHighlight : colors.bg}
-              >
-                <text fg={selectedIndex() === index() ? colors.cyan : colors.fgMuted}>
-                  {selectedIndex() === index() ? "▸ " : "  "}
-                  {option.label}
-                </text>
-              </box>
-            )}
+          <For each={actionOptions}>
+            {(option, index) => {
+              const globalIndex = () => workspaceOptions.length + index()
+              const isSelected = () => selectedIndex() === globalIndex()
+              return (
+                <box
+                  flexDirection="row"
+                  paddingLeft={2}
+                  paddingRight={2}
+                  paddingTop={1}
+                  paddingBottom={1}
+                  backgroundColor={isSelected() ? colors.bgHighlight : colors.bg}
+                >
+                  <text fg={isSelected() ? colors.cyan : colors.fgMuted}>
+                    {isSelected() ? "▸ " : "  "}
+                    {option.label}
+                  </text>
+                </box>
+              )
+            }}
           </For>
         </box>
       </box>
