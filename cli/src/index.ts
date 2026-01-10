@@ -59,7 +59,8 @@ export interface GlobexCliOptions {
 function createLoopCallbacks(
   setState: Setter<AppState>,
   workdir: string,
-  projectId: string
+  projectId: string,
+  originalWorkdir: string
 ): RalphLoopCallbacks {
   return {
     onIterationStart: (iteration, featureId) => {
@@ -194,11 +195,17 @@ function createLoopCallbacks(
         }
       })
 
-      // Update phase to complete and clear active project
+      // Update phase to complete, update registry, and clear active project
       try {
         await Effect.runPromise(updatePhase(workdir, projectId, "complete"))
-        await clearActiveProject(workdir)
-        log("ralph", "Project marked complete and active project cleared", { projectId })
+        // Update registry with completed phase
+        const registryEntry = await getProject(projectId)
+        if (registryEntry) {
+          await upsertProject(projectId, { ...registryEntry, phase: "complete" })
+        }
+        // Clear active project from original repo (where active-project file lives)
+        await clearActiveProject(originalWorkdir)
+        log("ralph", "Project marked complete and active project cleared", { projectId, originalWorkdir })
       } catch (err) {
         log("ralph", "Failed to update phase to complete", { error: String(err) })
       }
@@ -301,6 +308,7 @@ type PhaseRunner = (ctx: PhaseContext) => Promise<void>
 interface PhaseContext {
   artifactWorkdir: string
   codeWorkdir: string
+  originalWorkdir: string  // Original repo path (process.cwd()) for active-project file
   projectId: string
   model: string
   setState: Setter<AppState>
@@ -310,7 +318,7 @@ interface PhaseContext {
 }
 
 const runExecutePhase: PhaseRunner = async (ctx) => {
-  const callbacks = createLoopCallbacks(ctx.setState, ctx.artifactWorkdir, ctx.projectId)
+  const callbacks = createLoopCallbacks(ctx.setState, ctx.artifactWorkdir, ctx.projectId, ctx.originalWorkdir)
 
   await runRalphLoop(
     {
@@ -601,7 +609,8 @@ async function transitionToExecute(
   workdir: string,
   projectId: string,
   model: string,
-  signal: AbortSignal
+  signal: AbortSignal,
+  originalWorkdir?: string
 ): Promise<void> {
   const state = await loadState(workdir, projectId)
   const phase = state.currentPhase
@@ -655,6 +664,7 @@ async function transitionToExecute(
   const ctx: PhaseContext = {
     artifactWorkdir: workdir,
     codeWorkdir,
+    originalWorkdir: originalWorkdir ?? workdir,
     projectId,
     model,
     setState,
@@ -871,7 +881,7 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
       },
       onConfirmExecute: async () => {
         if (currentProjectId) {
-          await transitionToExecute(server!.url, setState, workdir, currentProjectId, model, signal)
+          await transitionToExecute(server!.url, setState, currentWorkdir, currentProjectId, model, signal, workdir)
           currentPhase = "execute"
         }
       },
@@ -966,11 +976,11 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
           )
         }
       } else if (existingState.currentPhase === "execute") {
-        await transitionToExecute(server.url, setState, effectiveWorkdir, activeProjectId, model, signal)
+        await transitionToExecute(server.url, setState, effectiveWorkdir, activeProjectId, model, signal, workdir)
       } else if (existingState.currentPhase === "complete") {
         // Complete projects should not be continued - clear and return to init
         log("index", "Cannot continue completed project", { projectId: activeProjectId })
-        await clearActiveProject(effectiveWorkdir)
+        await clearActiveProject(workdir)
         return
       } else {
         // init phase - restart from research
