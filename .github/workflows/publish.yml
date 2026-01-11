@@ -57,11 +57,11 @@ jobs:
           fi
 
           if [ -n "${TAG_VERSION}" ]; then
-            npm version "${TAG_VERSION}" --no-git-tag-version
+            npm version "${TAG_VERSION}" --no-git-tag-version --allow-same-version
           elif [ -n "${{ inputs.version }}" ]; then
-            npm version "${{ inputs.version }}" --no-git-tag-version
+            npm version "${{ inputs.version }}" --no-git-tag-version --allow-same-version
           elif [ -n "${{ inputs.bump }}" ]; then
-            npm version "${{ inputs.bump }}" --no-git-tag-version
+            npm version "${{ inputs.bump }}" --no-git-tag-version --allow-same-version
           fi
 
       - name: Publish to npm
