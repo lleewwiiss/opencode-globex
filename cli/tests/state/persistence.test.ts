@@ -7,7 +7,6 @@ import {
   readState,
   writeState,
   getProjectDir,
-  StateNotFoundError,
 } from "../../src/state/persistence.js"
 import type { GlobexState } from "../../src/state/types.js"
 

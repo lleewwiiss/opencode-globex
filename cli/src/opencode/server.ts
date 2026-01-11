@@ -58,7 +58,7 @@ export async function getOrCreateOpencodeServer(
   if (await tryConnectToExistingServer(url, options.signal)) {
     return {
       url,
-      close: () => {}, // No-op - we didn't start it
+      close: () => {},
       attached: true,
     }
   }

@@ -6,6 +6,12 @@
   "bin": {
     "globex": "./cli/bin/globex"
   },
+  "files": [
+    "cli/**",
+    "README.md",
+    "AGENTS.md",
+    "globex.jpg"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",

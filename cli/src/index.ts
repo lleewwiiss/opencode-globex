@@ -23,8 +23,8 @@ import type { Phase, ToolEvent } from "./state/types.js"
 import type { FileReference, InterviewAnswersPayload } from "./state/schema.js"
 import { Effect } from "effect"
 
-const DEFAULT_MODEL = "anthropic/claude-opus-4-5"
-const DEFAULT_VARIANT = "max"
+const DEFAULT_MODEL = "openai/gpt-5.2-codex"
+const DEFAULT_VARIANT = "high"
 
 async function readArtifactContent(workdir: string, projectId: string, artifactName: string): Promise<string> {
   const projectDir = getProjectDir(workdir, projectId)
@@ -123,9 +123,7 @@ function createLoopCallbacks(
         },
       }))
     },
-    onRalphComplete: () => {
-      // Spinner removal handled by onIdleChanged
-    },
+    onRalphComplete: () => {},
     onWiggumStart: (iteration) => {
       const label: ToolEvent = {
         iteration,
@@ -144,9 +142,7 @@ function createLoopCallbacks(
         },
       }))
     },
-    onWiggumComplete: () => {
-      // Spinner removal handled by onIdleChanged
-    },
+    onWiggumComplete: () => {},
     onFeatureComplete: () => {
       setState((prev) => ({
         ...prev,
@@ -156,12 +152,8 @@ function createLoopCallbacks(
         },
       }))
     },
-    onFeatureRetry: () => {
-      // No-op - spinner continues spinning
-    },
-    onFeatureBlocked: () => {
-      // No-op - will be handled by next iteration
-    },
+    onFeatureRetry: () => {},
+    onFeatureBlocked: () => {},
     onPaused: () => {
       setState((prev) => ({
         ...prev,
@@ -210,9 +202,7 @@ function createLoopCallbacks(
         log("ralph", "Failed to update phase to complete", { error: String(err) })
       }
     },
-    onError: () => {
-      // Errors are logged to debug.log - no UI event needed
-    },
+    onError: () => {},
     onCommitsUpdated: (commits, iteration) => {
       setState((prev) => {
         const events = prev.execute.events.map((e) => {
@@ -827,13 +817,7 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
         }
       })
       
-      // For now, just acknowledge the feedback and update artifact
-      // In full implementation, this would use the interview session to get agent response
-      // and potentially update the artifact
-      
-      // Simple acknowledgment for MVP
       setTimeout(async () => {
-        // Re-read the artifact in case it was updated
         const artifactContent = currentArtifactName 
           ? await readArtifactContent(currentWorkdir, currentProjectId!, currentArtifactName)
           : ""

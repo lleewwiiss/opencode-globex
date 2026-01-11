@@ -222,8 +222,14 @@ export async function waitForSessionIdle(
 /**
  * Abort a running session.
  */
+export interface SessionAbortClient {
+  session: {
+    abort: (input: { sessionID: string }) => Promise<{ data?: unknown }>
+  }
+}
+
 export async function abortSession(
-  client: OpencodeClient,
+  client: SessionAbortClient,
   sessionId: string
 ): Promise<void> {
   await client.session.abort({ sessionID: sessionId })

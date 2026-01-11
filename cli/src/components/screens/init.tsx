@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-import { createSignal, createMemo, Show } from "solid-js"
+import { createSignal, createMemo, Show, For } from "solid-js"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import type { SelectOption } from "@opentui/core"
 import { colors } from "../colors.js"

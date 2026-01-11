@@ -156,7 +156,8 @@ globex/
 │   │   │   ├── engine.ts      # Phase execution engine
 │   │   │   └── approval.ts    # Approval handling
 │   │   ├── agents/
-│   │   │   └── prompts.ts     # Agent prompt templates
+│   │   │   ├── prompts.ts     # Prompt loader
+│   │   │   └── prompts/       # Prompt markdown
 │   │   ├── opencode/
 │   │   │   ├── server.ts      # OpenCode server management
 │   │   │   ├── session.ts     # Session handling

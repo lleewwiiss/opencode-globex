@@ -12,6 +12,7 @@ import * as path from "node:path"
 import * as os from "node:os"
 import {
   runRalphLoop,
+  type RalphLoopClient,
   type RalphLoopContext,
   type RalphLoopCallbacks,
 } from "../../src/loop/ralph.js"
@@ -49,21 +50,19 @@ async function* createMockEventStream(sessionId: string) {
 }
 
 // Mock OpenCode client factory
-const createMockClient = () => {
+const createMockClient = (): RalphLoopClient => {
   const sessionId = "session-123"
-  return {
-    session: {
-      create: mock(() => Promise.resolve({ data: { id: sessionId } })),
-      prompt: mock(() => Promise.resolve({ data: {} })),
-    },
-    event: {
-      subscribe: mock(() =>
-        Promise.resolve({
-          stream: createMockEventStream(sessionId),
-        })
-      ),
-    },
+  const session = {
+    create: mock(() => Promise.resolve({ data: { id: sessionId } })),
+    prompt: mock((_input) => Promise.resolve({ data: {} })),
+    abort: mock((_input) => Promise.resolve({ data: {} })),
   }
+  const event = {
+    subscribe: mock(() => Promise.resolve({
+      stream: createMockEventStream(sessionId),
+    })),
+  }
+  return { session, event }
 }
 
 // Sample feature factory
@@ -139,7 +138,7 @@ describe("cli/loop/ralph", () => {
       )
 
       const ctx: RalphLoopContext = {
-        client: client as any,
+        client,
         artifactWorkdir: testDir,
         codeWorkdir: testDir,
         projectId,
@@ -183,7 +182,7 @@ describe("cli/loop/ralph", () => {
       spyOn(git, "getHeadHash").mockResolvedValue("abc123")
 
       const ctx: RalphLoopContext = {
-        client: client as any,
+        client,
         artifactWorkdir: testDir,
         codeWorkdir: testDir,
         projectId,
@@ -245,7 +244,7 @@ describe("cli/loop/ralph", () => {
       })
 
       const ctx: RalphLoopContext = {
-        client: client as any,
+        client,
         artifactWorkdir: testDir,
         codeWorkdir: testDir,
         projectId,
@@ -278,7 +277,7 @@ describe("cli/loop/ralph", () => {
       spyOn(git, "getHeadHash").mockResolvedValue("abc123")
 
       const ctx: RalphLoopContext = {
-        client: client as any,
+        client,
         artifactWorkdir: testDir,
         codeWorkdir: testDir,
         projectId,
@@ -329,7 +328,7 @@ describe("cli/loop/ralph", () => {
       })
 
       const ctx: RalphLoopContext = {
-        client: client as any,
+        client,
         artifactWorkdir: testDir,
         codeWorkdir: testDir,
         projectId,
@@ -356,7 +355,7 @@ describe("cli/loop/ralph", () => {
       await fs.writeFile(path.join(testDir, ".globex-pause"), "")
 
       const ctx: RalphLoopContext = {
-        client: client as any,
+        client,
         artifactWorkdir: testDir,
         codeWorkdir: testDir,
         projectId,
@@ -399,7 +398,8 @@ describe("cli/loop/ralph", () => {
       const client = {
         session: {
           create: mock(() => Promise.resolve({ data: { id: sessionId } })),
-          prompt: mock(() => Promise.resolve({ data: {} })),
+          prompt: mock((_input) => Promise.resolve({ data: {} })),
+          abort: mock((_input) => Promise.resolve({ data: {} })),
         },
         event: {
           subscribe: mock(() =>
@@ -419,7 +419,7 @@ describe("cli/loop/ralph", () => {
       const checkSpy = spyOn(signals, "checkSignal").mockResolvedValue(false)
 
       const ctx: RalphLoopContext = {
-        client: client as any,
+        client,
         artifactWorkdir: testDir,
         codeWorkdir: testDir,
         projectId,
@@ -455,7 +455,8 @@ describe("cli/loop/ralph", () => {
       const client = {
         session: {
           create: mock(() => Promise.resolve({ data: { id: sessionId } })),
-          prompt: mock(() => Promise.resolve({ data: {} })),
+          prompt: mock((_input) => Promise.resolve({ data: {} })),
+          abort: mock((_input) => Promise.resolve({ data: {} })),
         },
         event: {
           subscribe: mock(() =>
@@ -480,7 +481,7 @@ describe("cli/loop/ralph", () => {
       })
 
       const ctx: RalphLoopContext = {
-        client: client as any,
+        client,
         artifactWorkdir: testDir,
         codeWorkdir: testDir,
         projectId,
@@ -519,7 +520,7 @@ describe("cli/loop/ralph", () => {
       })
 
       const ctx: RalphLoopContext = {
-        client: client as any,
+        client,
         artifactWorkdir: testDir,
         codeWorkdir: testDir,
         projectId,

@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, afterEach, spyOn } from "bun:test"
-import { Effect, Exit } from "effect"
+import { Effect } from "effect"
 import * as fs from "node:fs/promises"
 import * as path from "node:path"
 import * as os from "node:os"
@@ -17,11 +17,9 @@ const createTestEntry = (overrides?: Partial<RegistryEntry>): RegistryEntry => (
 
 describe("cli/state/registry", () => {
   let testDir: string
-  let originalHomedir: typeof os.homedir
 
   beforeEach(async () => {
     testDir = await fs.mkdtemp(path.join(os.tmpdir(), "globex-registry-test-"))
-    originalHomedir = os.homedir
     // Mock HOME to isolate registry file
     spyOn(os, "homedir").mockReturnValue(testDir)
   })

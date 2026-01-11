@@ -50,7 +50,6 @@ function createSyntaxStyleWithFileRef(): { syntaxStyle: SyntaxStyle; fileStyleId
 }
 
 export function TextInputWithRefs(props: TextInputWithRefsProps) {
-  // eslint-disable-next-line no-unused-vars -- assigned via JSX ref
   let textareaRef: TextareaRenderable | undefined
   let inputBoxRef: BoxRenderable | undefined
 
@@ -297,7 +296,7 @@ export function TextInputWithRefs(props: TextInputWithRefsProps) {
       paddingRight={1}
     >
       <textarea
-        ref={textareaRef}
+        ref={(r: TextareaRenderable) => (textareaRef = r)}
         placeholder={props.placeholder}
         focused={props.focused ?? true}
         backgroundColor={colors.bg}

@@ -631,7 +631,7 @@ const interviewColors = {
 4. Remove `INTERVIEW_COMPLETE` marker instructions
 
 **Files:**
-- `cli/src/agents/prompts.ts` (modify)
+- `cli/src/agents/prompts/` (modify interview.md, plan-interview.md)
 
 ### Phase 3: Parser Updates (Small)
 

@@ -5,10 +5,10 @@ import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync } from 
 import { join } from "path"
 import { main } from "../src/index.js"
 import { upsertProject, loadRegistry, getProject, removeProject, type RegistryEntry } from "../src/state/registry.js"
-import { removeWorktree, listWorktrees, type Worktree } from "../src/git.js"
+import { removeWorktree } from "../src/git.js"
 import { rmSync, unlinkSync } from "fs"
 
-const DEFAULT_MODEL = "anthropic/claude-opus-4-5"
+const DEFAULT_MODEL = "openai/gpt-5.2-codex"
 const GLOBEX_DIR = ".globex"
 const PROJECTS_DIR = "projects"
 const ACTIVE_PROJECT_FILE = "active-project"

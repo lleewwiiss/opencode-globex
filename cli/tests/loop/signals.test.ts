@@ -8,7 +8,6 @@ import {
   createSignal,
   clearSignals,
   watchForSignalEffect,
-  SignalTimeoutError,
 } from "../../src/loop/signals.js"
 import { Effect } from "effect"
 

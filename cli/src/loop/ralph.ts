@@ -1,4 +1,3 @@
-import type { OpencodeClient } from "@opencode-ai/sdk/v2/client"
 import type { Feature } from "../state/schema.js"
 import type { ToolEvent } from "../state/types.js"
 import { getNextFeature, updateFeature } from "../features/manager.js"
@@ -11,6 +10,45 @@ import { log } from "../util/log.js"
 
 type AgentName = "ralph" | "wiggum"
 
+type RalphLoopEvent = {
+  type: string
+  properties?: Record<string, unknown> & {
+    sessionID?: string
+    error?: { name?: string; data?: { message?: string } }
+    part?: Record<string, unknown> & {
+      sessionID?: string
+      type?: string
+      tool?: string
+      state?: Record<string, unknown> & {
+        status?: string
+        title?: string
+        input?: Record<string, unknown>
+        time?: { end?: number; start?: number }
+      }
+    }
+  }
+}
+
+type RalphLoopPromptPart = {
+  type: "text"
+  text: string
+}
+
+export interface RalphLoopClient {
+  session: {
+    create: () => Promise<{ data?: { id?: string } }>
+    prompt: (input: {
+      sessionID: string
+      model: { providerID: string; modelID: string }
+      parts: RalphLoopPromptPart[]
+    }) => Promise<{ data?: unknown }>
+    abort: (input: { sessionID: string }) => Promise<{ data?: unknown }>
+  }
+  event: {
+    subscribe: () => Promise<{ stream: AsyncIterable<RalphLoopEvent> }>
+  }
+}
+
 interface AgentEventOptions {
   iteration: number
   agent: AgentName
@@ -22,7 +60,7 @@ const MAX_ATTEMPTS = 3
 const PAUSE_CHECK_INTERVAL_MS = 1000
 
 export interface RalphLoopContext {
-  client: OpencodeClient
+  client: RalphLoopClient
   artifactWorkdir: string
   codeWorkdir: string
   projectId: string
@@ -150,7 +188,7 @@ function buildWiggumPrompt(feature: Feature, codeWorkdir: string): string {
 }
 
 async function runAgentWithEvents(
-  client: OpencodeClient,
+  client: RalphLoopClient,
   prompt: string,
   model: string,
   eventOptions: AgentEventOptions,
@@ -200,8 +238,7 @@ async function runAgentWithEvents(
 
       // Tool events - surface to TUI
       if (event.type === "message.part.updated") {
-        const props = event.properties as { part?: { sessionID?: string; type?: string; tool?: string; state?: { status?: string; title?: string; input?: Record<string, unknown>; time?: { end?: number } } } }
-        const part = props.part
+        const part = event.properties?.part
         if (!part || part.sessionID !== sessionId) continue
 
         if (part.type === "tool" && part.state?.status === "completed") {
@@ -211,7 +248,7 @@ async function runAgentWithEvents(
           }
 
           const toolName = part.tool ?? "unknown"
-          const title = part.state.title ?? 
+          const title = part.state.title ??
             (part.state.input && Object.keys(part.state.input).length > 0
               ? JSON.stringify(part.state.input)
               : toolName)
@@ -227,7 +264,7 @@ async function runAgentWithEvents(
       }
 
       // Session idle - agent finished
-      if (event.type === "session.idle" && event.properties.sessionID === sessionId) {
+      if (event.type === "session.idle" && event.properties?.sessionID === sessionId) {
         log("ralph", "session.idle received - agent finished")
         success = true
         break
@@ -236,10 +273,10 @@ async function runAgentWithEvents(
       // Session error
       if (event.type === "session.error") {
         const props = event.properties
-        if (props.sessionID !== sessionId || !props.error) continue
+        if (!props || props.sessionID !== sessionId || !props.error) continue
 
         let errorMessage = String(props.error.name)
-        if ("data" in props.error && props.error.data && "message" in props.error.data) {
+        if (props.error.data?.message) {
           errorMessage = String(props.error.data.message)
         }
 

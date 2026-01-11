@@ -1,217 +1,149 @@
 # AGENTS.md
 
-CLI tool for agentic PRD generation with human-in-the-loop validation.
+## Scope
+- Applies to entire repo unless overridden.
+- Root project is `globex` CLI + TUI.
 
-## Build Commands
+## Quick Facts
+- Runtime: Bun + Node APIs.
+- Language: TypeScript (ESM, `type: module`).
+- UI: Solid + OpenTUI (`.tsx`).
+- Effects: `effect` + `@effect/platform`.
+- Lint: `oxlint`.
+- Build: `tsc`.
+- Tests: `bun test` in `cli/tests/`.
 
-```bash
-bun run build          # TypeScript compilation (tsc)
-bun run dev            # Watch mode compilation
-bun run check          # lint + build + test (use before commit)
-```
+## Install
+- `bun install`
+- `bun link` if you need global `globex`.
 
-## Test Commands
+## Build / Lint / Test
+- Build all: `bun run build` (runs `tsc`).
+- Lint all: `bun run lint` (runs `oxlint cli/src/`).
+- Lint fix: `bun run lint:fix`.
+- Tests all: `bun test cli/`.
+- Tests via script: `bun run test`.
+- Unit tests: `bun run test:unit`.
+- Integration tests: `bun run test:integration`.
+- Watch tests: `bun run test:watch`.
+- Full check: `bun run check` (lint + build + test).
 
-```bash
-bun test                              # All tests
-bun test cli/tests/loop/ralph.test.ts # Single file
-bun test cli/tests/loop/ralph.test.ts -t "executes"  # Single test by name
-bun test --watch                      # Watch mode
-bun test:unit                         # Unit tests only
-bun test:integration                  # Integration tests only
-```
+## Single Test
+- Run one file: `bun test cli/tests/path/to/file.test.ts`.
+- Example: `bun test cli/tests/loop/ralph.test.ts`.
 
-## Lint Commands
+## Project Layout
+- `cli/bin/` CLI entry.
+- `cli/src/` app, loop, state, components.
+- `cli/tests/` Bun tests.
+- `dist/` build output (generated).
+- `.globex/` runtime state (gitignored).
 
-```bash
-bun run lint           # oxlint cli/src/
-bun run lint:fix       # oxlint with auto-fix
-```
+## TypeScript / ESM
+- Use ESM syntax; no `require`.
+- Use `.js` extension in local imports.
+- Prefer `import type` for types.
+- `tsconfig.json` is strict; no `any` leaks.
+- Keep async logic typed (`Promise<T>` etc).
 
-## Architecture
+## Imports
+- Order: external → `node:` → local.
+- Group with blank line between sections.
+- Use namespace imports for Node builtins (`import * as fs`).
+- Prefer named imports for local modules.
+- Keep type-only imports separate when clarity helps.
 
-- **OpenCode SDK**: `@opencode-ai/sdk` for spawning agent sessions
-- **TUI Framework**: `@opentui/solid` for terminal UI
-- **Runtime**: Bun (not Node.js)
-- **FP Library**: Effect-TS exclusively - no raw Promises or try-catch
-- **Module Format**: ESM with `.js` extensions in imports
+## Formatting
+- 2-space indentation.
+- No semicolons.
+- Double quotes.
+- Trailing commas in multi-line objects/arrays.
+- Keep lines short-ish; wrap long args.
 
-## Code Style
+## Naming
+- camelCase for vars/functions.
+- PascalCase for types/classes/components.
+- kebab-case for filenames (`features-persistence.ts`).
+- Constants in `SCREAMING_SNAKE` only when truly constant.
+- Use clear, explicit names; avoid terse abbreviations.
 
-### Imports
+## Types & Data
+- Export interfaces/types for shared shapes.
+- Use `Schema.TaggedError` for error types.
+- Prefer explicit return types on exported fns.
+- Keep JSON schema in `cli/src/state/schema.ts`.
+- Validate external data before use.
 
-Order: external packages > internal modules > types
+## Error Handling
+- Prefer typed errors + `Effect.mapError`.
+- Log errors with context via `log()`.
+- Avoid swallowing errors unless user-facing safe.
+- Use fallback strings when reading artifacts fails.
 
-```typescript
-import { createOpencodeClient } from "@opencode-ai/sdk/v2"
-import { Effect, Schema } from "effect"
-import * as path from "node:path"
-import { loadState } from "./state/persistence.js"  // .js extension required
-import type { Phase } from "./state/types.js"
-```
+## Effect Patterns
+- Use `Effect.gen` + `yield*` for pipelines.
+- Use `Layer` for live service wiring.
+- Convert to promises at boundaries (`Effect.runPromise`).
+- Keep `Effect` logic isolated from UI components.
 
-### Effect-TS Patterns
+## Solid / OpenTUI
+- Components live in `cli/src/components/`.
+- Use functional components.
+- Keep state updates via setters (`setState`).
+- Avoid side effects during render; defer with `queueMicrotask`.
+- Use `jsxImportSource` set to `@opentui/solid`.
 
-Use Effect.gen for composable operations:
+## State + Persistence
+- State files under `.globex/`.
+- Use helpers in `cli/src/state/persistence.ts`.
+- Keep file IO async (`fs/promises`).
+- Sanitize project IDs (`sanitizeProjectId`).
 
-```typescript
-const effect = Effect.gen(function* () {
-  const state = yield* readState(workdir)
-  yield* writeState(workdir, updatedState)
-  return result
-})
-await Effect.runPromise(effect)
-```
+## Git / Worktrees
+- Use `cli/src/git.ts` helpers, not raw shell.
+- Worktrees live under `~/.globex/workspaces/`.
+- Worktree branch naming: `globex/<projectId>`.
 
-Error handling via tagged errors:
+## Tests
+- Use Bun test (`bun:test`).
+- Prefer `describe`/`test`/`expect`.
+- Use `mock`/`spyOn` for dependencies.
+- Clean temp dirs in `afterEach`.
+- Keep tests hermetic; avoid network.
 
-```typescript
-export class StateNotFoundError extends Schema.TaggedError<StateNotFoundError>()(
-  "StateNotFoundError",
-  { path: Schema.String }
-) {}
-```
+## Comments
+- Prefer self-documenting code.
+- Comments only when logic is non-obvious.
+- Keep comments short, factual.
 
-Layer composition for dependency injection:
+## Docs / Artifacts
+- Artifacts are `research.md`, `plan.md`, `features.json`.
+- Keep docs consistent with runtime expectations.
+- Avoid generating new docs unless asked.
 
-```typescript
-const PersistenceLayer = GlobexPersistenceLive.pipe(
-  Layer.provide(NodeFileSystem.layer)
-)
-```
+## Concurrency / Signals
+- Loop uses marker files: `.globex-done`, `.globex-approved`, `.globex-rejected`, `.globex-pause`.
+- Use helpers in `cli/src/loop/signals.ts`.
 
-### Schema Definitions
+## No Cursor/Copilot Rules
+- `.cursor/rules/` not present.
+- `.cursorrules` not present.
+- `.github/copilot-instructions.md` not present.
 
-Use Effect Schema for validation:
+## Safety
+- Do not edit `.globex/` unless feature requires.
+- Do not add new deps without request.
+- Do not add shell scripts for loop control.
+- Keep changes minimal and scoped.
 
-```typescript
-export const PhaseSchema = Schema.Union(
-  Schema.Literal("init"),
-  Schema.Literal("plan"),
-  Schema.Literal("execute")
-)
-export type Phase = Schema.Schema.Type<typeof PhaseSchema>
+## Verification Notes
+- Commands above sourced from `package.json`.
+- `tsconfig.json` defines strict ESM + `jsxImportSource`.
+- `README.md` lists dev commands.
 
-export const FeatureSchema = Schema.Struct({
-  id: Schema.String,
-  passes: Schema.Boolean,
-  optional: Schema.optional(Schema.String),
-  withDefault: Schema.optionalWith(Schema.Number, { default: () => 0 }),
-})
-```
+## When Unsure
+- Check existing patterns in `cli/src/`.
+- Ask before broad refactors.
+- Explain uncertainty plainly.
 
-### Naming Conventions
-
-- Files: kebab-case (`ralph.ts`, `persistence.ts`)
-- Types/Interfaces: PascalCase (`GlobexState`, `Feature`)
-- Functions: camelCase (`runRalphLoop`, `loadState`)
-- Constants: SCREAMING_SNAKE_CASE or camelCase depending on scope
-
-### Error Handling
-
-Return JSON with success/error pattern for functions that need structured responses:
-
-```typescript
-if (errorCondition) {
-  return JSON.stringify({
-    success: false,
-    error: "Descriptive error message",
-  })
-}
-return JSON.stringify({
-  success: true,
-  data: result,
-})
-```
-
-For Effect operations, use mapError for tagged errors:
-
-```typescript
-yield* fs.readFileString(path).pipe(
-  Effect.mapError(() => new StateNotFoundError({ path }))
-)
-```
-
-### TypeScript
-
-- Strict mode enabled
-- Use `type` imports for type-only imports
-- Prefer interfaces for object shapes, types for unions/aliases
-- No `any` - use `unknown` and narrow
-
-### Tests
-
-Bun test framework with describe/test/expect:
-
-```typescript
-import { describe, test, expect, beforeEach, afterEach } from "bun:test"
-
-describe("feature", () => {
-  let testDir: string
-
-  beforeEach(async () => {
-    testDir = await fs.mkdtemp(path.join(os.tmpdir(), "globex-test-"))
-  })
-
-  afterEach(async () => {
-    await fs.rm(testDir, { recursive: true, force: true })
-  })
-
-  test("does something", async () => {
-    const result = await someFunction(testDir)
-    expect(result.success).toBe(true)
-  })
-})
-```
-
-## Project Structure
-
-```
-cli/
-  bin/
-    globex.ts           # CLI entry point (yargs)
-  src/
-    index.ts            # Main entry, TUI startup
-    app.tsx             # TUI application (OpenTUI/Solid)
-    config.ts           # Configuration loading
-    git.ts              # Git operations
-    loop/
-      ralph.ts          # Ralph loop executor
-      signals.ts        # File marker detection
-    phases/
-      engine.ts         # Phase execution
-      approval.ts       # Approval handling
-    agents/
-      prompts.ts        # Agent prompt templates
-    opencode/
-      server.ts         # OpenCode server management
-      session.ts        # Session handling
-      events.ts         # Event subscription
-    state/
-      types.ts          # TypeScript types
-      schema.ts         # Effect Schema definitions
-      persistence.ts    # State CRUD
-    features/
-      manager.ts        # Feature tracking
-    artifacts/
-      save.ts           # Artifact persistence
-      validators.ts     # Citation validation
-    components/         # TUI components
-  tests/
-    *.test.ts           # Test files
-```
-
-## Globex Workflow Phases
-
-init -> research -> research_interview -> plan -> plan_interview -> features -> execute -> complete
-
-Each phase has artifacts stored in `.globex/projects/{projectId}/`:
-- `state.json` - workflow state
-- `research.md`, `plan.md` - markdown artifacts
-- `features.json` - feature list with passes/blocked status
-- `progress.md` - execution progress
-
-## Globex Learnings (auto-generated)
-
-- opencode run output contains terminal escape codes. Use `grep -a` (treat as text) when parsing output files, otherwise grep reports "Binary file matches" instead of actual content.
-<!-- end globex learnings -->
+## End
