@@ -18,6 +18,14 @@
   "publishConfig": {
     "access": "public"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lleewwiiss/opencode-globex"
+  },
+  "bugs": {
+    "url": "https://github.com/lleewwiiss/opencode-globex/issues"
+  },
+  "homepage": "https://github.com/lleewwiiss/opencode-globex",
   "scripts": {
     "build": "tsc && node scripts/copy-prompts.mjs",
     "dev": "tsc --watch",
