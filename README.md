@@ -120,7 +120,6 @@ This makes the `globex` command available globally.
 
 ```bash
 globex init "Add dark mode support"
-globex --description "Add dark mode support"
 ```
 
 Default model: `openai/gpt-5.2-codex` (variant `high`).
