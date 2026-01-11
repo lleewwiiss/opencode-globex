@@ -10,7 +10,8 @@
     "cli/**",
     "README.md",
     "AGENTS.md",
-    "globex.jpg"
+    "globex.png",
+    "screenshot.png"
   ],
   "scripts": {
     "build": "tsc",

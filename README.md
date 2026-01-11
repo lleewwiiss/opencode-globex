@@ -1,11 +1,11 @@
 <p align="center">
-  <img src="globex.jpg" alt="Globex Corporation - Hank Scorpio and Ralph Wiggum" width="600">
+  <img src="globex.png" alt="Globex Corporation - Hank Scorpio and Ralph Wiggum" width="100%">
 </p>
 
 <h1 align="center">Globex</h1>
 
 <p align="center">
-  <strong>Agentic PRD generation with human-in-the-loop validation</strong>
+  <strong>PRD interviews with a Ralph/Wiggum execution loop</strong>
 </p>
 
 <p align="center">
@@ -13,12 +13,28 @@
 </p>
 
 <p align="center">
-  <a href="#philosophy">Philosophy</a> •
-  <a href="#installation">Installation</a> •
-  <a href="#usage">Usage</a> •
-  <a href="#ralph-loop">Ralph Loop</a> •
-  <a href="#development">Development</a>
+  <a href="#what-it-is">What It Is</a> •
+  <a href="#why-its-useful">Why It’s Useful</a> •
+  <a href="#features">Features</a> •
+  <a href="#screenshot">Screenshot</a> •
+  <a href="#usage">Usage</a>
 </p>
+
+---
+
+## What It Is
+
+Globex is a CLI + TUI for turning a rough idea into a validated spec and then executing it with an agentic loop.
+
+- Generates `research.md`, `plan.md`, and `features.json`
+- Requires human approval at each spec phase
+- Runs an implementation loop with independent validation
+
+## Why It’s Useful
+
+- Converts vague ideas into concrete, reviewable artifacts
+- Forces alignment before code changes begin
+- Keeps execution iterative and accountable
 
 ---
 
@@ -33,7 +49,7 @@ Named after Hank Scorpio's company. The "Ralph loop" is named after Ralph Wiggum
 **Based on:**
 - [Anthropic: Effective Harnesses for Long-Running Agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents)
 - [Geoffrey Huntley: Ralph Driven Development](https://ghuntley.com/ralph/)
-- [Anthropic: Ralph Wiggum Plugin](https://github.com/anthropics/claude-code/tree/main/plugins/ralph-wiggum)
+- [opencode-ralph](https://github.com/Hona/opencode-ralph)
 
 ## Features
 
@@ -46,17 +62,23 @@ Named after Hank Scorpio's company. The "Ralph loop" is named after Ralph Wiggum
 
 ---
 
+## Screenshot
+
+<img src="screenshot.png" alt="Globex TUI screenshot" width="100%">
+
+---
+
 ## Flow
 
+```mermaid
+flowchart LR
+  Research["Research"] --> ResearchInterview["Interview (approve)"] --> Plan["Plan"] --> PlanInterview["Interview (approve)"] --> Features["Features"] --> Confirm["Confirm (approve)"] --> Ralph
+
+  subgraph Execute["Execute (Ralph Loop)"]
+    Ralph["Ralph (implement)"] --> Wiggum["Wiggum (validate)"] --> Ralph
+  end
 ```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│  Research   │────▶│    Plan     │────▶│  Features   │────▶│   Execute   │
-└─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
-       │                   │                   │                   │
-       ▼                   ▼                   ▼                   ▼
-   Interview           Interview           Interview          Ralph Loop
-   (approve)           (approve)           (approve)         (autonomous)
-```
+
 
 Each phase requires human approval before proceeding.
 
@@ -65,7 +87,7 @@ Each phase requires human approval before proceeding.
 ## Installation
 
 ```bash
-git clone https://github.com/yourorg/globex.git
+git clone https://github.com/anomalyco/globex.git
 cd globex
 bun install
 bun link
@@ -81,26 +103,38 @@ This makes the `globex` command available globally.
 
 ```bash
 globex init "Add dark mode support"
+globex --description "Add dark mode support"
 ```
 
-### Continue existing workflow
+Default model: `openai/gpt-5.2-codex` (variant `high`).
+
+### Resume a project
 
 ```bash
-globex continue              # Resume active project
-globex continue my-project   # Resume specific project
+globex                       # Resume active project
+globex --project my-project  # Run specific project
 ```
 
-### Check status
+### Manage projects
 
 ```bash
 globex status
+globex switch my-project
+globex abandon my-project --force
+```
+
+### Worktrees
+
+```bash
+globex workspace list
+globex workspace cleanup
 ```
 
 ### Options
 
 ```bash
-globex --help                          # Show all commands
-globex init "desc" --model anthropic/claude-sonnet-4  # Specify model
+globex --help
+globex --model anthropic/claude-sonnet-4
 ```
 
 ---
@@ -109,10 +143,10 @@ globex init "desc" --model anthropic/claude-sonnet-4  # Specify model
 
 Coach/player pattern with two agents per iteration:
 
-1. **Ralph (player)** — Implements ONE feature, outputs `<ralph>DONE:FEATURE_ID</ralph>`
+1. **Ralph (player)** — Implements ONE feature, writes `.globex-done` in project workdir
 2. **Wiggum (coach)** — Validates implementation against acceptance criteria
-   - Outputs `<wiggum>APPROVED</wiggum>` if all criteria pass
-   - Outputs `<wiggum>REJECTED:reason</wiggum>` with specific feedback
+   - Writes `.globex-approved` on success
+   - Writes `.globex-rejected` with JSON reasons on failure
 3. On rejection, Ralph retries with feedback in next iteration
 4. Fresh context between iterations (stateless execution)
 
@@ -210,19 +244,17 @@ bun test         # all tests
 
 ## Acknowledgements
 
-Globex stands on the shoulders of giants. Massive thanks to:
-
 ### [OpenCode](https://github.com/anomalyco/opencode)
 
-OpenCode is an exceptional open-source AI coding agent that powers Globex's agent sessions. The codebase is beautifully architected—clean TypeScript with Bun, Zod for validation, and an elegant TUI built with OpenTUI and SolidJS. The @ file reference autocomplete in Globex is directly inspired by (and learned from) OpenCode's prompt component implementation. If you're building AI-powered developer tools, OpenCode is the gold standard to study.
+Globex uses the OpenCode SDK for agent sessions.
 
 ### [opencode-ralph](https://github.com/Hona/opencode-ralph)
 
-Luke Parker's `@hona/ralph-cli` is the definitive implementation of Ralph-driven development. It's a beautifully minimal CLI that reads a plan, picks one task, completes it, commits, and repeats—with fresh context every iteration. Globex's execution loop is directly inspired by opencode-ralph's architecture. The TUI patterns, state persistence, and OpenCode SDK integration we use all trace back to studying this codebase. If you want pure Ralph-driven development without the PRD workflow, use opencode-ralph directly.
+Reference implementation for a Ralph-style loop.
 
 ### [Geoffrey Huntley's Ralph Driven Development](https://ghuntley.com/ralph/)
 
-The conceptual foundation. Geoffrey's insight that agents succeed through determined retry (like Ralph Wiggum stumbling into success) is the philosophy behind everything here. Fresh context every iteration eliminates drift. Deterministic failures become debuggable. AGENTS.md accumulates wisdom. This is the way.
+Original write-up of the Ralph loop concept.
 
 ---
 
