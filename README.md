@@ -48,8 +48,13 @@ Named after Hank Scorpio's company. The "Ralph loop" is named after Ralph Wiggum
 
 **Based on:**
 - [Anthropic: Effective Harnesses for Long-Running Agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents)
+- [HumanLayer: ACE-FCA](https://github.com/humanlayer/advanced-context-engineering-for-coding-agents/blob/main/ace-fca.md)
 - [Geoffrey Huntley: Ralph Driven Development](https://ghuntley.com/ralph/)
 - [opencode-ralph](https://github.com/Hona/opencode-ralph)
+
+## Disclaimer
+
+Globex is an independent project and not affiliated with or endorsed by The Simpsons, Fox, or Disney. Names and likenesses are used for humor; all trademarks belong to their respective owners.
 
 ## Features
 
@@ -71,8 +76,13 @@ Named after Hank Scorpio's company. The "Ralph loop" is named after Ralph Wiggum
 ## Flow
 
 ```mermaid
-flowchart LR
-  Research["Research"] --> ResearchInterview["Interview (approve)"] --> Plan["Plan"] --> PlanInterview["Interview (approve)"] --> Features["Features"] --> Confirm["Confirm (approve)"] --> Ralph
+flowchart TD
+  Research["Research"] --> ResearchInterview["Interview (approve)"]
+  ResearchInterview --> Plan["Plan"]
+  Plan --> PlanInterview["Interview (approve)"]
+  PlanInterview --> Features["Features"]
+  Features --> Confirm["Confirm (approve)"]
+  Confirm --> Ralph
 
   subgraph Execute["Execute (Ralph Loop)"]
     Ralph["Ralph (implement)"] --> Wiggum["Wiggum (validate)"] --> Ralph
