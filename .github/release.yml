@@ -1,0 +1,19 @@
+changelog:
+  categories:
+    - title: Breaking Changes
+      labels:
+        - breaking-change
+        - semver-major
+    - title: Features
+      labels:
+        - feature
+        - enhancement
+        - semver-minor
+    - title: Fixes
+      labels:
+        - bug
+        - fix
+        - semver-patch
+    - title: Other Changes
+      labels:
+        - "*"
