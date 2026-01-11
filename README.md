@@ -84,8 +84,15 @@ flowchart TD
   Features --> Confirm["Confirm (approve)"]
   Confirm --> Ralph
 
+  Research -.-> ResearchArtifact["research.md"]
+  Plan -.-> PlanArtifact["plan.md"]
+  Features -.-> FeaturesArtifact["features.json"]
+
   subgraph Execute["Execute (Ralph Loop)"]
     Ralph["Ralph (implement)"] --> Wiggum["Wiggum (validate)"] --> Ralph
+    Ralph -.-> DoneMarker[".globex-done"]
+    Wiggum -.-> ApprovedMarker[".globex-approved"]
+    Wiggum -.-> RejectedMarker[".globex-rejected"]
   end
 ```
 
