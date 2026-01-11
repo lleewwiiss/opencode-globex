@@ -1,46 +1,53 @@
 {
-  "name": "globex",
+  "name": "opencode-globex",
   "version": "0.1.0",
-  "description": "Agentic PRD generation with human-in-the-loop validation",
+  "description": "PRD interviews with a Ralph/Wiggum execution loop",
+  "license": "MIT",
   "type": "module",
   "bin": {
-    "globex": "./cli/bin/globex"
+    "globex": "dist/cli/bin/globex.js"
   },
   "files": [
-    "cli/**",
+    "dist/**",
     "README.md",
     "AGENTS.md",
+    "LICENSE",
     "globex.png",
     "screenshot.png"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/copy-prompts.mjs",
     "dev": "tsc --watch",
+    "prepublishOnly": "bun run build",
     "test": "bun test cli/",
     "test:unit": "bun test cli/tests/*.test.ts",
     "test:integration": "bun test cli/tests/integration/*.test.ts",
     "test:watch": "bun test --watch",
     "lint": "oxlint cli/src/",
     "lint:fix": "oxlint cli/src/ --fix",
-    "check": "bun run lint && bun run build && bun test ./cli/"
+    "check": "bun run lint && bun run build && bun test ./cli/",
+    "check:ci": "bun run lint && bun run build && bun test ./cli/"
   },
   "dependencies": {
     "@effect/platform": "^0.94.1",
     "@effect/platform-node": "^0.104.0",
-    "@opencode-ai/sdk": "^1.1.1",
-    "@opentui/core": "^0.1.70",
-    "@opentui/solid": "^0.1.70",
-    "effect": "^3.12.0",
+    "@opencode-ai/sdk": "^1.1.13",
+    "@opentui/core": "^0.1.72",
+    "@opentui/solid": "^0.1.72",
+    "effect": "^3.19.14",
     "fuzzysort": "^3.1.0",
     "solid-js": "1.9.10",
     "yargs": "^18.0.0",
-    "zod": "^3.24.0"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/bun": "^1.3.5",
-    "@types/node": "^22.0.0",
+    "@types/node": "^22.19.5",
     "@types/yargs": "^17.0.35",
     "oxlint": "^1.38.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.9.3"
   }
 }

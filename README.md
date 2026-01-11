@@ -103,10 +103,19 @@ Each phase requires human approval before proceeding.
 
 ## Installation
 
+### Via npm
+
 ```bash
-git clone https://github.com/anomalyco/globex.git
+npm install -g opencode-globex
+```
+
+### From source
+
+```bash
+git clone https://github.com/lleewwiiss/opencode-globex.git
 cd globex
 bun install
+bun run build
 bun link
 ```
 
