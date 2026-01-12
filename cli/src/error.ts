@@ -76,7 +76,7 @@ export class ErrorRecoveryService extends Context.Tag("ErrorRecoveryService")<
       ctx: ErrorContext,
       error: UncaughtExceptionError,
       state: GlobexState
-    ) => Effect.Effect<never, never, never>
+    ) => Effect.Effect<never, UncaughtExceptionError, never>
     readonly logError: (
       ctx: ErrorContext,
       errorType: ErrorType,
@@ -186,7 +186,7 @@ export const ErrorRecoveryServiceLive = Layer.effect(
       ctx: ErrorContext,
       error: UncaughtExceptionError,
       state: GlobexState
-    ): Effect.Effect<never, never, never> =>
+    ): Effect.Effect<never, UncaughtExceptionError, never> =>
       Effect.gen(function* () {
         const message = error.stack
           ? `${error.message}\n${error.stack}`
@@ -202,10 +202,10 @@ export const ErrorRecoveryServiceLive = Layer.effect(
 
         yield* Effect.sync(() => {
           console.error(`Fatal error: ${error.message}`)
-          process.exit(1)
+          process.exitCode = 1
         })
 
-        return yield* Effect.never
+        return yield* Effect.fail(error)
       })
 
     const resetRetryState = (): void => {

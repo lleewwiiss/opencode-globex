@@ -673,25 +673,37 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
   const signal = options.signal ?? abortController.signal
 
   const keepaliveInterval = setInterval(() => {}, 60000)
+  let server: Awaited<ReturnType<typeof getOrCreateOpencodeServer>> | null = null
+
+  let shutdownResolve: (() => void) | null = null
+  const shutdownPromise = new Promise<void>((resolve) => {
+    shutdownResolve = resolve
+  })
+  let shutdownRequested = false
+  let requestAppExit = () => {}
 
   async function cleanup() {
     clearInterval(keepaliveInterval)
     abortController.abort()
   }
 
-  process.on("SIGINT", async () => {
+  const requestShutdown = async (code: number) => {
+    if (shutdownRequested) return
+    shutdownRequested = true
+    process.exitCode = code
+    shutdownResolve?.()
+    requestAppExit()
     await cleanup()
-    await new Promise((resolve) => setTimeout(resolve, 100))
-    process.exit(0)
+    server?.close()
+  }
+
+  process.on("SIGINT", () => {
+    void requestShutdown(0)
   })
 
-  process.on("SIGTERM", async () => {
-    await cleanup()
-    await new Promise((resolve) => setTimeout(resolve, 100))
-    process.exit(0)
+  process.on("SIGTERM", () => {
+    void requestShutdown(0)
   })
-
-  let server: Awaited<ReturnType<typeof getOrCreateOpencodeServer>> | null = null
 
   try {
     const config = await loadConfig()
@@ -881,11 +893,13 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
       },
     }
 
-    const { exitPromise, setState } = await startApp(initialState, callbacks, workdir)
+    const { exitPromise, setState, exit } = await startApp(initialState, callbacks, workdir)
+    requestAppExit = exit
 
     const action = await Promise.race([
       actionPromise,
       exitPromise.then(() => null),
+      shutdownPromise.then(() => null),
     ])
 
     if (!action) {
@@ -1034,19 +1048,18 @@ export async function main(options: GlobexCliOptions = {}): Promise<void> {
       interviewSubmitAnswer = submitAnswer
     }
 
-    await exitPromise
+    await Promise.race([exitPromise, shutdownPromise])
   } finally {
     server?.close()
     await cleanup()
     // Small delay to let Bun/OpenTUI finish cleanup before exit
     await new Promise((resolve) => setTimeout(resolve, 100))
-    process.exit(0)
   }
 }
 
 if (import.meta.main) {
   main().catch((error) => {
     console.error("Fatal error:", error instanceof Error ? error.message : String(error))
-    process.exit(1)
+    process.exitCode = 1
   })
 }

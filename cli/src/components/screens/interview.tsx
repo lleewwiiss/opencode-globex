@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { createSignal, createMemo, createEffect, onCleanup, Show } from "solid-js"
-import { useKeyboard, useRenderer } from "@opentui/solid"
+import { useKeyboard } from "@opentui/solid"
 import type { Setter } from "solid-js"
 import { colors } from "../colors.js"
 import { SimpleHeader } from "../simple-header.js"
@@ -40,15 +40,6 @@ export function InterviewScreen(props: InterviewScreenProps) {
   const currentState = () => props.state()
   
   log("interview-screen", "InterviewScreen mounting")
-
-  let renderer: ReturnType<typeof useRenderer>
-  try {
-    renderer = useRenderer()
-    log("interview-screen", "useRenderer succeeded")
-  } catch (e) {
-    log("interview-screen", "useRenderer FAILED", { error: String(e) })
-    throw e
-  }
 
   const [spinnerFrame, setSpinnerFrame] = createSignal(0)
   const [elapsed, setElapsed] = createSignal(0)
@@ -147,16 +138,10 @@ export function InterviewScreen(props: InterviewScreenProps) {
     const keyName = key.name.toLowerCase()
 
     if (keyName === "q" && !key.ctrl && isWaitingForAgent()) {
-      renderer.setTerminalTitle("")
-      renderer.destroy()
       props.onQuit()
     } else if (keyName === "c" && key.ctrl) {
-      renderer.setTerminalTitle("")
-      renderer.destroy()
       props.onQuit()
     } else if (keyName === "escape" && !isWaitingForAgent()) {
-      renderer.setTerminalTitle("")
-      renderer.destroy()
       props.onQuit()
     } else if (keyName === "tab" && !isWaitingForAgent() && hasStructuredQuestions()) {
       const qs = questions()

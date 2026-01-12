@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { createSignal, createMemo, createEffect, onCleanup, For, Show } from "solid-js"
-import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
+import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import type { Setter } from "solid-js"
 import { colors } from "../colors.js"
 import { GlobeView } from "../globe-view.js"
@@ -39,7 +39,6 @@ function formatElapsed(ms: number): string {
 }
 
 export function BackgroundScreen(props: BackgroundScreenProps) {
-  const renderer = useRenderer()
   const [spinnerFrame, setSpinnerFrame] = createSignal(0)
   const [elapsed, setElapsed] = createSignal(0)
   const terminalDimensions = useTerminalDimensions()
@@ -77,12 +76,8 @@ export function BackgroundScreen(props: BackgroundScreenProps) {
     const keyName = key.name.toLowerCase()
 
     if (keyName === "q" && !key.ctrl) {
-      renderer.setTerminalTitle("")
-      renderer.destroy()
       props.onQuit()
     } else if (keyName === "c" && key.ctrl) {
-      renderer.setTerminalTitle("")
-      renderer.destroy()
       props.onQuit()
     }
   })

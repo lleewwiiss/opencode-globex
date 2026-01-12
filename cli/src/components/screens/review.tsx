@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { createSignal, createEffect, onCleanup, Show, For } from "solid-js"
-import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
+import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import type { ScrollBoxRenderable, ScrollAcceleration } from "@opentui/core"
 import type { Setter } from "solid-js"
 import { colors } from "../colors.js"
@@ -48,7 +48,6 @@ export function ReviewScreen(props: ReviewScreenProps) {
   
   log("review-screen", "ReviewScreen mounting")
 
-  const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
 
   const [elapsed, setElapsed] = createSignal(0)
@@ -87,12 +86,8 @@ export function ReviewScreen(props: ReviewScreenProps) {
     const keyName = key.name.toLowerCase()
 
     if (keyName === "c" && key.ctrl) {
-      renderer.setTerminalTitle("")
-      renderer.destroy()
       props.onQuit()
     } else if (keyName === "escape" && !isWaitingForAgent()) {
-      renderer.setTerminalTitle("")
-      renderer.destroy()
       props.onQuit()
     } else if (keyName === "y" && !isWaitingForAgent()) {
       props.onConfirm()

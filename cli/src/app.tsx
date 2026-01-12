@@ -107,9 +107,11 @@ export interface AppProps {
 export interface StartAppResult {
   exitPromise: Promise<void>
   setState: Setter<AppState>
+  exit: () => void
 }
 
 let globalSetState: Setter<AppState> | null = null
+let globalQuit: (() => void) | null = null
 
 export function createInitialAppState(screen: Screen = "init"): AppState {
   return {
@@ -204,11 +206,11 @@ export async function startApp(
     }
   )
 
-  if (!globalSetState) {
-    throw new Error("TUI state setter not initialized")
+  if (!globalSetState || !globalQuit) {
+    throw new Error("TUI state not initialized")
   }
 
-  return { exitPromise, setState: globalSetState }
+  return { exitPromise, setState: globalSetState, exit: globalQuit }
 }
 
 function ExecuteScreen(props: {
@@ -219,7 +221,6 @@ function ExecuteScreen(props: {
   onKeyboardEvent?: () => void
   onPauseToggle?: (paused: boolean) => void
 }) {
-  const renderer = useRenderer()
   const [elapsed, setElapsed] = createSignal(0)
 
   createEffect(() => {
@@ -246,8 +247,6 @@ function ExecuteScreen(props: {
       const keyName = key.name.toLowerCase()
 
       if (keyName === "q" && !key.ctrl) {
-        renderer.setTerminalTitle("")
-        renderer.destroy()
         props.onQuit()
       } else if (keyName === "p" && !key.ctrl) {
         const newPaused = !props.state.paused
@@ -257,8 +256,6 @@ function ExecuteScreen(props: {
         }))
         props.onPauseToggle?.(newPaused)
       } else if (keyName === "c" && key.ctrl) {
-        renderer.setTerminalTitle("")
-        renderer.destroy()
         props.onQuit()
       }
     },
@@ -313,6 +310,8 @@ export function App(props: AppProps) {
     renderer.destroy()
     props.callbacks.onQuit()
   }
+
+  globalQuit = handleQuit
 
   return (
     <Switch>

@@ -13,7 +13,7 @@ export async function confirm(message: string): Promise<boolean> {
   }
   process.stdin.resume()
 
-  return new Promise<boolean>((resolve) => {
+  return new Promise<boolean>((resolve, reject) => {
     const onData = (data: Buffer) => {
       const char = data.toString()
 
@@ -26,7 +26,8 @@ export async function confirm(message: string): Promise<boolean> {
       process.stdout.write(char + "\n")
 
       if (char === "\x03") {
-        process.exit(1)
+        reject(new Error("Input aborted"))
+        return
       }
 
       resolve(char.charAt(0).toLowerCase() === "y")
@@ -45,7 +46,7 @@ export async function input(message: string): Promise<string> {
   process.stdin.resume()
   process.stdin.setEncoding("utf8")
 
-  return new Promise<string>((resolve) => {
+  return new Promise<string>((resolve, reject) => {
     const onData = (data: string) => {
       process.stdin.pause()
       process.stdin.removeListener("data", onData)
@@ -53,7 +54,8 @@ export async function input(message: string): Promise<string> {
       const text = data.trim()
 
       if (text === "\x03") {
-        process.exit(1)
+        reject(new Error("Input aborted"))
+        return
       }
 
       resolve(text)
@@ -76,7 +78,7 @@ export async function select(message: string, options: string[]): Promise<number
   }
   process.stdin.resume()
 
-  return new Promise<number>((resolve) => {
+  return new Promise<number>((resolve, reject) => {
     const onData = (data: Buffer) => {
       const char = data.toString()
 
@@ -89,7 +91,8 @@ export async function select(message: string, options: string[]): Promise<number
       process.stdout.write(char + "\n")
 
       if (char === "\x03") {
-        process.exit(1)
+        reject(new Error("Input aborted"))
+        return
       }
 
       const num = parseInt(char, 10)

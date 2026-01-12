@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { createSignal, createMemo, For, Show } from "solid-js"
-import { useKeyboard, useRenderer } from "@opentui/solid"
+import { useKeyboard } from "@opentui/solid"
 import { colors } from "../colors.js"
 import { SimpleHeader } from "../simple-header.js"
 import { SimpleFooter, type KeyHint } from "../simple-footer.js"
@@ -15,7 +15,6 @@ export interface ConfirmScreenProps {
 }
 
 export function ConfirmScreen(props: ConfirmScreenProps) {
-  const renderer = useRenderer()
   const [selectedIndex, setSelectedIndex] = createSignal(0)
 
   const actionOptions = [
@@ -35,17 +34,11 @@ export function ConfirmScreen(props: ConfirmScreenProps) {
       if (selected?.value === "confirm") {
         props.onConfirm()
       } else {
-        renderer.setTerminalTitle("")
-        renderer.destroy()
         props.onQuit()
       }
     } else if (keyName === "q" && !key.ctrl) {
-      renderer.setTerminalTitle("")
-      renderer.destroy()
       props.onQuit()
     } else if (keyName === "c" && key.ctrl) {
-      renderer.setTerminalTitle("")
-      renderer.destroy()
       props.onQuit()
     }
   })

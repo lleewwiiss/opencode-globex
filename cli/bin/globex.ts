@@ -122,7 +122,8 @@ await yargs(hideBin(process.argv))
       
       if (!entry) {
         console.error(`Project '${projectId}' not found in registry.`)
-        process.exit(1)
+        process.exitCode = 1
+        return
       }
       
       // Check if project is in current repo
@@ -167,7 +168,8 @@ await yargs(hideBin(process.argv))
       
       if (!entry) {
         console.error(`Project '${projectId}' not found in registry.`)
-        process.exit(1)
+        process.exitCode = 1
+        return
       }
       
       if (!force) {
@@ -379,13 +381,15 @@ await yargs(hideBin(process.argv))
         console.error("  globex status        - List all projects")
         console.error("  globex switch <id>   - Switch to a project")
         console.error("  globex init <desc>   - Create a new project")
-        process.exit(1)
+        process.exitCode = 1
+        return
       }
       
       // Check project exists
       if (!projectExists(workdir, projectId)) {
         console.error(`Project '${projectId}' not found.`)
-        process.exit(1)
+        process.exitCode = 1
+        return
       }
       
       setActiveProject(workdir, projectId)
